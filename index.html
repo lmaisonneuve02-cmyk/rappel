@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.github.com https://generativelanguage.googleapis.com; manifest-src 'self'; worker-src 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>Rappel</title>
+  <meta name="description" content="Cartes de révision corrigées, au micro ou au clavier, et QCM.">
+  <meta name="theme-color" content="#fbf8f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151012" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rappel">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@500&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="evitement" href="#vue">Aller au contenu</a>
+  <header class="entete" id="entete">
+    <div class="entete__in">
+      <button type="button" class="marque" id="etat-synchro" data-mode="chargement">
+        <span class="marque__nom"><svg class="icone marque__icone" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 13h4l2-5 3 10 3-14 2.5 9H22"/></svg>Rappel</span>
+        <span class="synchro"><span class="synchro__point" aria-hidden="true"></span><span class="synchro__texte" id="synchro-texte">Chargement…</span></span>
+      </button>
+      <button type="button" class="compteur" id="compteur">
+        <span class="compteur__texte" id="compteur-texte">Acquises : 0/30</span>
+        <progress class="barre barre--compteur" id="compteur-barre" max="30" value="0" aria-hidden="true"></progress>
+      </button>
+    </div>
+    <div id="sous-entete" class="sous-entete"></div>
+  </header>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="annonce" class="lecteur-seul" aria-live="polite"></div>
+  <main id="vue" class="vue" tabindex="-1">
+    <div class="page page--chargement"><p class="aide">Chargement de Rappel…</p></div>
+  </main>
+  <nav id="onglets" class="onglets" aria-label="Onglets"></nav>
+  <div id="surimpression" class="surimpression" hidden></div>
+  <noscript><p class="page">Rappel a besoin de JavaScript pour fonctionner.</p></noscript>
+</body>
+</html>

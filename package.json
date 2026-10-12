@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Rappel 2 : cartes de révision avec correction intelligente, micro et QCM",
   "scripts": {
-    "test": "node --test tests/unit/",
-    "test:e2e": "node --test --test-concurrency=1 tests/e2e/",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.mjs",
     "verifier": "node outils/verifier-donnees.mjs"
   },
   "devDependencies": {

@@ -143,6 +143,11 @@ export function toast(message, { duree = 4000 } = {}) {
   const t = $('toast');
   if (!t) return;
   t.textContent = message;
+  // Sous la barre de séance (« Terminer · Carte n sur N ») quand elle est là : elle ne doit pas être cachée.
+  // Position posée par le CSSOM (autorisé par la CSP) ; sinon, celle de la feuille de style.
+  const sous = $('sous-entete');
+  const bas = sous?.childElementCount && !document.documentElement.classList.contains('sans-entete') ? sous.getBoundingClientRect().bottom : 0;
+  t.style.top = bas > 0 ? `${Math.round(bas + 8)}px` : '';
   t.hidden = false;
   t.classList.add('visible');
   clearTimeout(minuterieToast);
@@ -344,7 +349,7 @@ export const BADGES = {
   gemini: 'Corrigé par Gemini',
   local: "Corrigé sur l'appareil",
   'hors-ligne': 'Corrigé hors ligne',
-  exact: 'Reconnu : réponse attendue',
+  exact: 'Reconnu : réponse attendue',
   carnet: 'Reconnu (déjà accepté)',
   auto: 'Noté par toi',
   contestation: 'Corrigé après un second avis',

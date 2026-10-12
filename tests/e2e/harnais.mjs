@@ -54,19 +54,25 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.png': 'image/png',
 };
 
+// L'appli est servie sous un sous-chemin, comme sur GitHub Pages (https://<compte>.github.io/rappel/) :
+// un chemin absolu (« /js/… ») tomberait hors de l'appli et répondrait 404.
+export const SOUS_CHEMIN = '/rappel/';
+
 export async function demarrerServeur() {
+  const introuvables = [];   // chemins demandés qui ont répondu 404
   const serveur = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (p.endsWith('/')) p += 'index.html';
-    const f = join(RACINE, p);
-    if (!f.startsWith(RACINE) || /node_modules|\.git/.test(f) || !existsSync(f) || statSync(f).isDirectory()) {
+    if (p === SOUS_CHEMIN.slice(0, -1)) { res.writeHead(301, { Location: SOUS_CHEMIN }); res.end(); return; }
+    const f = p.startsWith(SOUS_CHEMIN) ? join(RACINE, p.slice(SOUS_CHEMIN.length) + (p.endsWith('/') ? 'index.html' : '')) : null;
+    if (!f || !f.startsWith(RACINE) || /node_modules|\.git/.test(f) || !existsSync(f) || statSync(f).isDirectory()) {
+      introuvables.push(p);
       res.writeHead(404); res.end('404'); return;
     }
     res.writeHead(200, { 'Content-Type': TYPES[extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(readFileSync(f));
   });
   await new Promise(r => serveur.listen(0, '127.0.0.1', r));
-  return { base: `http://127.0.0.1:${serveur.address().port}/`, fermer: () => new Promise(r => serveur.close(r)) };
+  return { base: `http://127.0.0.1:${serveur.address().port}${SOUS_CHEMIN}`, introuvables, fermer: () => new Promise(r => serveur.close(r)) };
 }
 
 export const lancerNavigateur = () => chromium.launch();
@@ -246,8 +252,11 @@ export async function verifierEcran(page, nom) {
 
 export const clic = (page, nom) => page.getByRole('button', { name: nom, exact: true }).first().click();
 
+// Texte d'un élément, espaces insécables (typographie française : « Acquises : », « … ») ramenées à des espaces.
+export const texte = async cible => (await cible.textContent())?.replace(/\u00a0/g, ' ') ?? null;
+
 // Texte de l'en-tête « Acquises : X/30 ».
-export const compteur = page => page.locator('#compteur-texte').textContent();
+export const compteur = page => texte(page.locator('#compteur-texte'));
 
 // Fichiers du faux dépôt (JSON / JSONL analysés).
 export function fichiersDepot(faux) {

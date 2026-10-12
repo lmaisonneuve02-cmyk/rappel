@@ -42,6 +42,7 @@ export function creer(ctx) {
   let signature = '';
   let minuterieLent = null;
   let lent = false;
+  let actionEntree = null;   // Entrée (focus hors champ) : « Commencer », s'il est proposé
 
   function filtreDuJour(d, now) {
     const jour = jourParis(now);
@@ -62,13 +63,14 @@ export function creer(ctx) {
     const sig = JSON.stringify([!!cles.jeton, aDesCartes, r, filtre, acquises, objectif, etat.mode, etat.code, lent, d.ordre.length, ctx.enLigne()]);
     if (!force && sig === signature) return;
     signature = sig;
+    actionEntree = null;
     const defile = page.querySelector('.pastilles')?.scrollLeft || 0;
 
     // Sans jeton : rien à proposer, on explique pourquoi.
     if (!cles.jeton) {
       vider(page,
         h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
-        h('p', { class: 'chapeau', text: `Rappel lit tes cartes et garde tes progrès dans ton dépôt « ${cles.depot.depot} ». Sans jeton d'accès, il n'a rien à te proposer.` }));
+        h('p', { class: 'chapeau', text: `Rappel lit tes cartes et garde tes progrès dans ton dépôt « ${cles.depot.depot} ». Sans jeton d'accès, il n'a rien à te proposer.` }));
       vider(barre, bouton('Relier mes cartes', { principal: true, onClick: () => ctx.aller('accueil') }));
       return;
     }
@@ -78,7 +80,7 @@ export function creer(ctx) {
       const reessayer = bouton('Réessayer', { principal: true, onClick: () => ctx.sync.rafraichir('manuel') });
       if (etat.mode === 'hors-ligne') {
         vider(page, h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
-          bandeau("Pas de connexion, et tes cartes ne sont pas encore sur cet appareil. Connecte-toi une fois : ensuite, Rappel marchera aussi hors ligne.", { type: 'horsligne' }));
+          bandeau("Pas de connexion, et tes cartes ne sont pas encore sur cet appareil. Connecte-toi une fois : ensuite, Rappel marchera aussi hors ligne.", { type: 'horsligne' }));
         vider(barre, reessayer);
       } else if (etat.mode === 'erreur') {
         vider(page, h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
@@ -97,11 +99,13 @@ export function creer(ctx) {
     const blocs = [];
     // Erreur qui demande d'agir (jeton expiré…) : la révision reste possible.
     if (etat.mode === 'erreur' && CODES_CLES.has(etat.code)) {
-      blocs.push(bandeau(`${etat.message} En attendant, tu peux réviser : tes réponses partiront dès que ça marchera.`, {
+      blocs.push(bandeau(`${etat.message} En attendant, tu peux réviser : tes réponses partiront dès que ça marchera.`, {
         type: 'erreur', action: bouton('Ouvrir Réglages', { onClick: () => ctx.aller('reglages', { section: 'cles' }) }) }));
+    } else if (etat.mode === 'erreur' && etat.code === 'illisible') {
+      blocs.push(bandeau('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.', { type: 'erreur' }));
     }
     if (acquises >= objectif) {
-      blocs.push(bandeau(`${acquises} cartes acquises : objectif du jour atteint. Tu peux t'arrêter ou continuer.`, { type: 'reussite' }));
+      blocs.push(bandeau(`${acquises} cartes acquises : objectif du jour atteint. Tu peux t'arrêter ou continuer.`, { type: 'reussite' }));
     }
 
     const paquetNom = filtre === 'tout' ? null : (d.paquets[filtre]?.nom || filtre);
@@ -116,8 +120,8 @@ export function creer(ctx) {
         h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
         h('p', { class: 'chiffres', text: chiffres }),
         h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${r.revisions && r.nouvelles ? ' · révisions d\'abord' : ''}` }),
-        reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : encore ${reste}. ` }),
-          r.total >= reste ? 'Cette séance peut suffire.' : `Cette séance en donne au plus ${r.total} : ensuite, tu pourras réviser en avance.`) : null));
+        reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : encore ${reste}. ` }),
+          r.total >= reste ? 'Cette séance peut suffire.' : `Cette séance en donne au plus ${r.total} : ensuite, tu pourras réviser en avance.`) : null));
     } else {
       const total = resume(d, now, 'tout');
       const prochaines = demain(d, now);
@@ -125,8 +129,8 @@ export function creer(ctx) {
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page titre-page--icone' }, icone('juste', { classe: 'icone--reussite' }), h('span', { text: paquetNom ? 'Rien à faire dans ce paquet' : "Tout est fait pour aujourd'hui" })),
         paquetNom && total.total ? h('p', { class: 'chapeau', text: `Il reste ${nb(total.total, 'carte')} dans les autres paquets.` }) : null,
-        reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Encore ${reste} pour l'objectif. ` }), 'Révise en avance : elles comptent dans tes acquises.') : null,
-        prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
+        reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Encore ${reste} pour l'objectif. ` }), 'Révise en avance : elles comptent dans tes acquises.') : null,
+        prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
     }
 
     // Limite de nouvelles cartes atteinte (et il en reste à découvrir).
@@ -134,13 +138,21 @@ export function creer(ctx) {
     const jamaisVues = cartesRestantesJamaisVues(d);
     if (filtre === 'tout' && r.nouvelles === 0 && jamaisVues > 0 && nouvellesDuJour(d, now) >= limite) {
       blocs.push(h('div', { class: 'bloc' },
-        h('p', { class: 'aide', text: limite > 0 ? `Les ${limite} nouvelles cartes du jour sont faites. Tu peux en demander plus dans Réglages.` : 'Nouvelles cartes : 0 par jour pour le moment. Tu peux en demander dans Réglages.' }),
+        h('p', { class: 'aide', text: limite > 0 ? `Les ${limite} nouvelles cartes du jour sont faites. Tu peux en demander plus dans Réglages.` : 'Nouvelles cartes : 0 par jour pour le moment. Tu peux en demander dans Réglages.' }),
         h('button', { type: 'button', class: 'lien', onclick: () => ctx.aller('reglages', { section: 'rythme' }), text: 'Réglages › Rythme' })));
     } else if (filtre === 'tout' && jamaisVues === 0) {
       blocs.push(h('p', { class: 'aide', text: 'Tu as vu toutes les cartes des cours préparés. Les prochains paquets arriveront avec de nouveaux cours.' }));
     }
 
-    if (!enLigne) blocs.push(bandeau("Hors ligne : correction sur l'appareil. Tout est gardé et partira au retour du réseau.", { type: 'horsligne' }));
+    // Stockage en mémoire (navigation privée, IndexedDB bloqué) : rien ne survit à la fermeture.
+    const enMemoire = !!ctx.stockage?.enMemoire;
+    if (!enLigne) {
+      blocs.push(bandeau(enMemoire ? "Hors ligne : correction sur l'appareil. Tes réponses partiront au retour du réseau."
+        : "Hors ligne : correction sur l'appareil. Tout est gardé et partira au retour du réseau.", { type: 'horsligne' }));
+    }
+    if (enMemoire) {
+      blocs.push(bandeau("Ce navigateur ne garde rien après fermeture (navigation privée ?) : tes réponses partent dès qu'il y a du réseau.", { type: 'discret' }));
+    }
 
     // Pastilles : un seul paquet ? (seulement si au moins deux paquets ont des cartes aujourd'hui)
     const options = [];
@@ -154,7 +166,7 @@ export function creer(ctx) {
         filtreMemo = { jour: jourParis(ctx.maintenant()), filtre: id };
         afficher(true);
       }, { etiquette: 'Choisir un paquet' });
-      blocs.push(h('div', { class: 'choix-paquet' }, h('p', { class: 'petit-titre', text: 'Un seul paquet ? (facultatif)' }), groupe));
+      blocs.push(h('div', { class: 'choix-paquet' }, h('p', { class: 'petit-titre', text: 'Un seul paquet ? (facultatif)' }), groupe));
       requestAnimationFrame(() => { groupe.scrollLeft = defile; });
     }
 
@@ -165,7 +177,7 @@ export function creer(ctx) {
           bouton('Mains libres', { icone: 'casque', classe: 'btn--large', onClick: () => ctx.aller('mainslibres', { filtre, direct: aideVue('mainslibres') }) }),
           h('p', { class: 'aide', text: 'Je lis les questions, tu réponds à voix haute.' })));
       } else {
-        blocs.push(h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter tes réponses.'));
+        blocs.push(h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter tes réponses.'));
       }
     }
     vider(page, blocs);
@@ -174,7 +186,8 @@ export function creer(ctx) {
     const qcm = qcmProposables(d).length > 0;
     if (r.total > 0) {
       const libelle = paquetNom ? `Commencer · ${paquetNom} (${r.total})` : `Commencer · ${nb(r.total, 'carte')}`;
-      vider(barre, bouton(libelle, { principal: true, onClick: () => ctx.aller('seance', { filtre }) }));
+      actionEntree = () => ctx.aller('seance', { filtre });
+      vider(barre, bouton(libelle, { principal: true, onClick: actionEntree }));
     } else {
       const enAvance = bouton('Réviser en avance', { principal: reste > 0, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) });
       const faireQcm = qcm ? bouton('Faire des QCM', { principal: reste === 0, onClick: () => ctx.aller('qcm') }) : null;
@@ -182,11 +195,21 @@ export function creer(ctx) {
     }
   }
 
+  // Sur PC : Entrée lance la séance, sauf dans un champ, sur un bouton ou un lien, ou sous une feuille ouverte.
+  function clavier(ev) {
+    if (ev.key !== 'Enter' || !actionEntree || ev.repeat || ev.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return;
+    if (!document.getElementById('surimpression')?.hidden) return;
+    if (ev.target?.closest?.('input, textarea, select, button, a, summary, [contenteditable]')) return;
+    ev.preventDefault();
+    actionEntree();
+  }
+  document.addEventListener('keydown', clavier);
+
   afficher(true);
   return {
     noeud, titre: "Aujourd'hui",
     surDonnees: () => afficher(),
     surEtat: () => afficher(),
-    quitter: () => clearTimeout(minuterieLent),
+    quitter: () => { clearTimeout(minuterieLent); document.removeEventListener('keydown', clavier); },
   };
 }

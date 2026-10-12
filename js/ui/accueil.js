@@ -19,9 +19,9 @@ function points(etape) {
 
 function messageJeton(e, depot) {
   switch (e?.code) {
-    case 'jeton': return 'GitHub refuse ce jeton. Recopie-le en entier : il commence par github_pat_.';
-    case 'introuvable': return `Ce jeton ne voit pas le dépôt « ${depot} ». Sur GitHub, ajoute-le dans « Repository access ».`;
-    case 'droits': return 'Ce jeton peut lire mais pas enregistrer. Sur GitHub, mets « Contents » sur « Read and write ».';
+    case 'jeton': return 'GitHub refuse ce jeton. Recopie-le en entier : il commence par github_pat_.';
+    case 'introuvable': return `Ce jeton ne voit pas le dépôt « ${depot} ». Sur GitHub, ajoute-le dans « Repository access ».`;
+    case 'droits': return 'Ce jeton peut lire mais pas enregistrer. Sur GitHub, mets « Contents » sur « Read and write ».';
     case 'reseau': return 'Pas de connexion. Réessaie une fois connecté.';
     default: return e?.message || "La vérification n'a pas abouti. Réessaie dans un instant.";
   }
@@ -30,7 +30,7 @@ function messageJeton(e, depot) {
 function messageGemini(e) {
   switch (e?.code) {
     case 'cle': return 'Google refuse cette clé. Recopie-la depuis AI Studio, en entier.';
-    case 'region': return "Gemini n'est pas ouvert depuis ce pays ou ce réseau (VPN ?). Tu peux continuer sans clé.";
+    case 'region': return "Gemini n'est pas ouvert depuis ce pays ou ce réseau (VPN ?). Tu peux continuer sans clé.";
     case 'reseau': return 'Pas de connexion. Réessaie une fois connecté.';
     default: return `${e?.message || 'Gemini ne répond pas.'} Réessaie dans un instant, ou passe cette étape.`;
   }
@@ -83,7 +83,7 @@ export function creer(ctx) {
         if (r && r.ecriture === false) throw { code: 'droits' };
         ctx.definirCles({ jeton });
         ok = true;
-        message(zone, `Jeton accepté : Rappel peut lire et enregistrer dans « ${depot.depot} ».`, 'ok');
+        message(zone, `Jeton accepté : Rappel peut lire et enregistrer dans « ${depot.depot} ».`, 'ok');
         libeller(principal, 'Continuer');
         majTrouve();
       } catch (e) {
@@ -96,15 +96,15 @@ export function creer(ctx) {
 
     vider(racine,
       entete('Relier tes cartes'),
-      h('p', { class: 'chapeau', text: `Bienvenue. Rappel lit tes cartes et enregistre tes réponses dans ton dépôt GitHub « ${depot.depot} ». Il lui faut un jeton d'accès : un mot de passe limité à ce dépôt, créé une seule fois.` }),
+      h('p', { class: 'chapeau', text: `Bienvenue. Rappel lit tes cartes et enregistre tes réponses dans ton dépôt GitHub « ${depot.depot} ». Il lui faut un jeton d'accès : un mot de passe limité à ce dépôt, créé une seule fois, le même sur tous tes appareils.` }),
       h('ol', { class: 'marche' },
         h('li', null, 'Touche ', h('strong', { text: 'Créer le jeton sur GitHub' }), ' (connecte-toi si besoin).'),
-        h('li', null, 'Nom : Rappel. ', h('strong', { text: '« Expiration »' }), ' : la plus longue possible.'),
-        h('li', null, h('strong', { text: '« Repository access »' }), ' : « Only select repositories », puis ', h('strong', { text: depot.depot }), '.'),
-        h('li', null, h('strong', { text: '« Permissions »' }), ' : « Contents » sur « Read and write ». Puis « Generate token », et copie-le.')),
+        h('li', null, h('strong', { text: '« Token name »' }), ' : Rappel. ', h('strong', { text: '« Expiration »' }), ' : la plus longue possible.'),
+        h('li', null, h('strong', { text: '« Repository access »' }), ' : « Only select repositories », puis ', h('strong', { text: depot.depot }), '.'),
+        h('li', null, h('strong', { text: '« Permissions »' }), ' : « Contents » sur « Read and write ». Puis « Generate token » : copie-le et garde-le (gestionnaire de mots de passe), il resservira sur tes autres appareils.')),
       lienExterne('Créer le jeton sur GitHub', LIEN_JETON),
       bloc, zone, infoTrouve,
-      h('p', { class: 'aide', text: 'Déjà fait sur un autre appareil ? GitHub ne remontre jamais un jeton : crée-en un par appareil.' }));
+      h('p', { class: 'aide', text: 'Déjà créé sur un autre appareil ? Colle ici le même jeton. Perdu ? GitHub ne le remontre jamais : sur GitHub, « Regenerate token », puis colle le nouveau sur chaque appareil.' }));
     vider(barre, principal);
   }
 
@@ -113,7 +113,7 @@ export function creer(ctx) {
     const d = ctx.donnees();
     const paquets = Object.keys(d.paquets).length;
     const cartes = Object.keys(d.cartes).length;
-    infoTrouve.textContent = paquets ? `Trouvé : ${nb(paquets, 'paquet')}, ${nb(cartes, 'carte')}.` : (ctx.cles().jeton ? 'Je récupère tes cartes…' : '');
+    infoTrouve.textContent = paquets ? `Trouvé : ${nb(paquets, 'paquet')}, ${nb(cartes, 'carte')}.` : (ctx.cles().jeton ? 'Je récupère tes cartes…' : '');
   }
 
   function etape2() {
@@ -129,16 +129,16 @@ export function creer(ctx) {
     async function verifier() {
       if (ok) { sansCle = false; etape = 3; afficher(); return; }
       const cle = input.value.trim();
-      if (!cle) { message(zone, 'Colle d\'abord la clé dans le champ, ou touche « Plus tard ».'); input.focus(); return; }
+      if (!cle) { message(zone, 'Colle d\'abord la clé dans le champ, ou touche « Plus tard ».'); input.focus(); return; }
       // Vérifié sur place : un identifiant de projet collé par erreur donnerait un refus peu parlant.
-      if (!/^(AQ\.|AIza)/.test(cle)) { message(zone, 'Ce n\'est pas une clé Gemini : elle commence par AQ. Recopie-la depuis AI Studio.'); input.focus(); return; }
+      if (!/^(AQ\.|AIza)/.test(cle)) { message(zone, 'Ce n\'est pas une clé Gemini : elle commence par AQ. Recopie-la depuis AI Studio.'); input.focus(); return; }
       principal.disabled = true;
       libeller(principal, 'Je vérifie…');
       try {
         await verifierCle({ cle, fetch: ctx.fetch });
         ctx.definirCles({ gemini: cle });
         ok = true;
-        message(zone, 'Gemini répond : la correction intelligente est prête.', 'ok');
+        message(zone, 'Gemini répond : la correction intelligente est prête.', 'ok');
         libeller(principal, 'Continuer');
       } catch (e) {
         if (e?.code === 'quota') {
@@ -158,10 +158,10 @@ export function creer(ctx) {
     vider(racine,
       entete('Correction par Gemini'),
       h('p', { class: 'surtitre', text: 'Facultatif' }),
-      h('p', { class: 'chapeau', text: "Avec une clé Gemini (gratuite), ta réponse est jugée sur le sens : fautes, abréviations et dictée passent. Sans clé, ton appareil corrige en cherchant les idées clés : c'est moins fin." }),
+      h('p', { class: 'chapeau', text: "Avec une clé Gemini (gratuite), ta réponse est jugée sur le sens : fautes, abréviations et dictée passent. Sans clé, ton appareil corrige en cherchant les idées clés : c'est moins fin." }),
       h('ol', { class: 'marche' },
         h('li', null, 'Touche ', h('strong', { text: 'Obtenir une clé' }), ' (compte Google).'),
-        h('li', null, 'Touche « Create API key ». Si on te demande un projet, choisis d\'en créer un (gratuit, sans carte bancaire).'),
+        h('li', null, 'Touche « Create API key ». Si on te demande un projet, choisis d\'en créer un (gratuit, sans carte bancaire).'),
         h('li', null, 'Copie la clé (elle commence par AQ.) et colle-la ici.')),
       lienExterne('Obtenir une clé sur AI Studio', LIEN_GEMINI),
       bloc, zone);
@@ -172,11 +172,11 @@ export function creer(ctx) {
     vider(racine,
       entete("C'est parti"),
       h('ul', { class: 'liste-etapes' },
-        h('li', null, icone('boucle'), h('span', { text: "Chaque jour : tes révisions d'abord, puis tes nouvelles cartes." })),
+        h('li', null, icone('boucle'), h('span', { text: "Chaque jour : tes révisions d'abord, puis tes nouvelles cartes." })),
         h('li', null, icone('fiche'), h('span', { text: 'Avant de nouvelles cartes, tu lis leur micro-fiche (1 min).' })),
-        h('li', null, icone('micro'), h('span', { text: 'Tu réponds en écrivant ou en dictant. Réponse dans ta tête ? « Voir la réponse », et tu te notes.' })),
-        h('li', null, icone('juste'), h('span', { text: 'Je corrige : Juste, Partiel ou Faux. Pas d\'accord ? « Je conteste ».' })),
-        h('li', null, icone('soleil'), h('span', { text: `Objectif : ${ctx.objectif()} cartes acquises par jour. Juste ou partiel, elle compte.` }))),
+        h('li', null, icone('micro'), h('span', { text: 'Tu réponds en écrivant ou en dictant. Réponse dans ta tête ? « Voir la réponse », et tu te notes.' })),
+        h('li', null, icone('juste'), h('span', { text: 'Je corrige : Juste, Partiel ou Faux. Pas d\'accord ? « Je conteste ».' })),
+        h('li', null, icone('soleil'), h('span', { text: `Objectif : ${ctx.objectif()} cartes acquises par jour. Juste ou partiel, elle compte.` }))),
       sansCle ? h('p', { class: 'aide', text: 'Sans clé Gemini, la correction se fait sur ton appareil. Tu pourras ajouter la clé dans Réglages.' }) : null);
     vider(barre, bouton('Voir ma séance du jour', { principal: true, onClick: () => ctx.aller('aujourdhui') }));
   }

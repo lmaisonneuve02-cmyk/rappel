@@ -33,8 +33,8 @@ export function creer(ctx, params = {}) {
   function majAide(d) {
     const titre = t => h('span', { class: 'ml-commandes__titre', text: t });
     if (!d.micro && ['pause', 'erreur', 'attente-geste'].includes(d.phase)) {
-      vider(aideCommandes, titre('Micro coupé : '), d.phase === 'attente-geste' ? 'touche le bouton pour répondre.' : 'touche « Reprendre ».');
-    } else vider(aideCommandes, titre('Tu peux dire : '), d.phase === 'pause' ? 'reprendre · stop' : commandes.join(' · '));
+      vider(aideCommandes, titre('Micro coupé : '), d.phase === 'attente-geste' ? 'touche le bouton pour répondre.' : 'touche « Reprendre ».');
+    } else vider(aideCommandes, titre('Tu peux dire : '), d.phase === 'pause' ? 'reprendre · stop' : commandes.join(' · '));
   }
   majAide({});
 
@@ -73,7 +73,7 @@ export function creer(ctx, params = {}) {
         d.texte ? h('p', { class: 'verdict__ligne', text: d.texte }) : null));
     } else vider(zoneVerdict);
     const rep = d.partiel || d.reponse || '';
-    zoneReponse.textContent = rep && d.phase !== 'fin' ? `« ${rep} »` : '';
+    zoneReponse.textContent = rep && d.phase !== 'fin' ? `« ${rep} »` : '';
 
     // Fiche à lire.
     if (d.phase === 'lecture-fiche' && d.fiche) {
@@ -105,7 +105,8 @@ export function creer(ctx, params = {}) {
       h('div', { class: 'grand-compteur' },
         h('p', { class: 'grand-compteur__chiffre', text: `${ctx.acquises()}/${ctx.objectif()}` }),
         h('p', { class: 'grand-compteur__texte', text: "acquises aujourd'hui" })),
-      h('p', { class: 'chiffres chiffres--doux', text: [nb(b.reponses || b.faites || 0, 'réponse'), nb(b.justes || 0, 'juste'), nb(b.partielles || 0, 'partielle'), nb(b.fausses || 0, 'fausse')].join(' · ') }));
+      h('p', { class: 'chiffres chiffres--doux', text: [nb(b.reponses || b.faites || 0, 'réponse'), b.justes && nb(b.justes, 'juste'),
+        b.partielles && nb(b.partielles, 'partielle'), b.fausses && nb(b.fausses, 'fausse')].filter(Boolean).join(' · ') }));
     vider(barre, bouton('Retour', { principal: true, onClick: () => ctx.aller('aujourdhui') }));
     contenu.querySelector('h1').focus({ preventScroll: true });
     annoncer('Séance terminée.');
@@ -145,7 +146,7 @@ export function creer(ctx, params = {}) {
         h('li', null, icone('fiche'), h('span', { text: 'Avant de nouvelles cartes, je te laisse lire la fiche à l\'écran.' }))),
       h('p', { class: 'petit-titre', text: 'À tout moment, tu peux dire' }),
       h('p', { class: 'ml-commandes ml-commandes--grand', text: commandes.join(' · ') }),
-      h('p', { class: 'aide', text: 'Garde l\'appli à l\'écran : elle reste allumée. Ton navigateur va demander le micro : touche « Autoriser ».' }));
+      h('p', { class: 'aide', text: 'Garde l\'appli à l\'écran : elle reste allumée. Ton navigateur va demander le micro : touche « Autoriser ».' }));
     vider(barre, bouton('Démarrer', { principal: true, icone: 'micro', onClick: lancer }));
   } else {
     vider(contenu, zoneEtat);

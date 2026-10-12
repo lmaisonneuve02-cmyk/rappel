@@ -1,7 +1,7 @@
 // Premiers pas : sans jeton → jeton d'accès vérifié → clé Gemini → « C'est parti » → Aujourd'hui.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, JETON } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, JETON, texte } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -30,7 +30,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
     await page.fill('#jeton', JETON);
     await page.getByText('GitHub refuse ce jeton.', { exact: false }).waitFor({ state: 'detached' });
     await clic(page, 'Vérifier');
-    await page.getByText(/Jeton accepté : Rappel peut lire et enregistrer/).waitFor();
+    await page.getByText(/Jeton accepté\s: Rappel peut lire et enregistrer/).waitFor();
     await page.getByText('Trouvé : 2 paquets, 9 cartes.').waitFor();
     await verifierEcran(page, 'premiers-pas-1-ok');
     assert.equal(await page.evaluate(() => localStorage.getItem('rappel.jeton')), JETON);
@@ -60,7 +60,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
     await page.locator('.page--aujourdhui .bloc-seance').waitFor();
     await page.getByRole('heading', { name: 'Ta séance du jour' }).waitFor();
     await page.getByText('2 révisions · 3 nouvelles cartes').waitFor();
-    assert.equal(await page.locator('.barre-action .btn--principal').textContent(), 'Commencer · 5 cartes');
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Commencer · 5 cartes');
     assert.equal(await compteur(page), 'Acquises : 0/30');
     await page.locator('#synchro-texte', { hasText: 'Enregistré' }).waitFor();
     await verifierEcran(page, 'premiers-pas-aujourdhui');

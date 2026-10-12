@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { jourParis } from '../../js/temps.js';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, CARTES, fichiersDepot, attendre } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, CARTES, fichiersDepot, attendre, texte } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -26,19 +26,19 @@ test('mains libres : la question est lue, la réponse dictée est corrigée, le 
 
     // La première question est lue (après la présentation), puis j'écoute.
     await page.locator('.ml-etat--ecoute').waitFor({ timeout: 10000 });
-    const texteQuestion = (await page.locator('.ml-question').textContent()).trim();
+    const texteQuestion = (await texte(page.locator('.ml-question'))).trim();
     const id = Object.keys(DICTEES).find(k => CARTES[k].q === texteQuestion);
     assert.ok(id, `question inattendue : ${texteQuestion}`);
     const dits = () => page.evaluate(() => window.__dits.slice());
     assert.ok((await dits()).join(' ').includes(texteQuestion), 'la question est dite à voix haute');
-    assert.match(await page.locator('.seance-haut__position').textContent(), /^Carte 1 sur 5$/);
-    assert.equal(await page.locator('.ml-commandes').textContent(), 'Tu peux dire : je ne sais pas · répète · suivant · pause · je conteste · stop');
+    assert.match(await texte(page.locator('.seance-haut__position')), /^Carte 1 sur 5$/);
+    assert.equal(await texte(page.locator('.ml-commandes')), 'Tu peux dire : je ne sais pas · répète · suivant · pause · je conteste · stop');
     await verifierEcran(page, 'mains-libres-ecoute');
 
     // Réponse dictée → correction → verdict dit.
     await attendre(async () => (await dits()).includes('Juste.'), { message: 'verdict dit à voix haute' });
     await page.locator('.ml-verdict .verdict__mot', { hasText: 'Juste' }).waitFor();
-    assert.equal(await page.locator('.ml-reponse').textContent(), `« ${DICTEES[id]} »`);
+    assert.equal(await texte(page.locator('.ml-reponse')), `« ${DICTEES[id]} »`);
     assert.equal(await compteur(page), 'Acquises : 1/30');
     assert.ok(o.requetesGemini.some(r => r.genre === 'correction'));
     await verifierEcran(page, 'mains-libres-verdict');
@@ -53,8 +53,8 @@ test('mains libres : la question est lue, la réponse dictée est corrigée, le 
     await page.locator('.seance-haut .btn', { hasText: 'Touche encore' }).waitFor();
     await page.locator('.seance-haut .btn').first().click();
     await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
-    assert.equal(await page.locator('.grand-compteur__chiffre').textContent(), '1/30');
-    assert.match(await page.locator('.chiffres--doux').textContent(), /^1 réponse · 1 juste · 0 partielle · 0 fausse$/);
+    assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '1/30');
+    assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste$/);
     await verifierEcran(page, 'mains-libres-fin');
     await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
     const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${jourParis(Date.now()).slice(0, 7)}.jsonl`];

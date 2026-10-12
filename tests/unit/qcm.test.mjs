@@ -213,6 +213,27 @@ test('choisirQcm : nombre par défaut, cours choisi, série mélangée', () => {
   assert.ok(ordres.size > 1);
 });
 
+test('choisirQcm « a-faire » : dus et jamais faits des cours vus, jamais un QCM acquis ni en attente', () => {
+  const d = donneesQcm();
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 20, choix: 'a-faire', rnd: graine(1) })), ['q1', 'q3', 'q8', 'q9']);
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 2, choix: 'a-faire', rnd: graine(1) })), ['q1', 'q8']);   // dus d'abord
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 20, cours: 'p2', choix: 'a-faire', rnd: graine(1) })), ['q8', 'q9']);
+  // Tout fait : rien à proposer (q1 et q8 refaits et réussis, q3 et q9 réussis d'emblée).
+  for (const id of ['q1', 'q3', 'q8', 'q9']) d.qcmJournal.push(tentative(id, T + MIN, 1));
+  assert.deepEqual(choisirQcm(d, T + HEURE, { n: 20, choix: 'a-faire', rnd: graine(1) }), []);
+  assert.equal(choisirQcm(d, T + HEURE, { n: 20, rnd: graine(1) }).length, 6);   // 'tout' : les anciens reviennent
+});
+
+test('choisirQcm « reussis » : QCM acquis seulement, les plus anciens d\'abord', () => {
+  const d = donneesQcm();
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 20, choix: 'reussis', rnd: graine(1) })), ['q5']);   // q2 raté, q8 dû : exclus
+  d.qcmJournal.push(tentative('q3', T - 3 * JOUR, 1), tentative('q9', T - HEURE, 1));
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 20, choix: 'reussis', rnd: graine(1) })), ['q3', 'q5', 'q9']);
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 2, choix: 'reussis', rnd: graine(1) })), ['q3', 'q5']);   // q9, le plus récent, attend
+  assert.deepEqual(ids(choisirQcm(d, T, { n: 20, cours: 'p1', choix: 'reussis', rnd: graine(1) })), ['q3']);
+  assert.deepEqual(choisirQcm({}, T, { n: 5, choix: 'reussis', rnd: graine(1) }), []);
+});
+
 test('choisirQcm : rien à proposer', () => {
   assert.deepEqual(choisirQcm({}, T, { n: 5, rnd: graine(1) }), []);
   const d = donneesQcm();

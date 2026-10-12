@@ -13,7 +13,7 @@ const generations = new Map();   // cours → {etat: 'en-cours'|'fini'|'erreur',
 
 function baremeTexte(b) {
   const x = (b && b.length === 4 ? b : [1, 0.5, 0.2, 0]).map(virgule);
-  return `Barème : 0 erreur = ${x[0]} point · 1 = ${x[1]} · 2 = ${x[2]} · 3 ou plus = ${x[3]}. Une erreur : une case cochée à tort ou oubliée.`;
+  return `Barème : 0 erreur = ${x[0]} point · 1 = ${x[1]} · 2 = ${x[2]} · 3 ou plus = ${x[3]}. Une erreur : une case cochée à tort ou oubliée.`;
 }
 
 // Cours connus : paquets dans l'ordre, puis cours qui n'ont que des QCM.
@@ -52,14 +52,17 @@ export function creer(ctx, params = {}) {
     const now = ctx.maintenant();
     const r = d.reglages;
     const n = Number(r.qcmParSeance) || 8;
-    const melange = choisirQcm(d, now, { n });
+    // Mélange : seulement ce qui est dû ou jamais fait (un QCM acquis ne revient pas de lui-même).
+    const melange = choisirQcm(d, now, { n, choix: 'a-faire' });
+    const reussis = melange.length ? [] : choisirQcm(d, now, { n, choix: 'reussis' });
     const fin = finJourParis(now);
     const journal = d.qcmJournal || [];
     const proposables = qcmProposables(d);
+    const dejaFaits = journal.some(l => proposables.some(q => q.id === l.qcm));
     const dus = proposables.filter(q => { const e = etatQcm(q.id, journal); return e.due != null && e.due < fin; }).length;
     const cle = !!ctx.cles().gemini;
     const cours = listeCours(d);
-    const sig = JSON.stringify([melange.length, dus, proposables.length, journal.length, cle, cours.length, [...generations.entries()], r.baremeQcm, n]);
+    const sig = JSON.stringify([melange.length, reussis.length, dus, proposables.length, journal.length, cle, cours.length, [...generations.entries()], r.baremeQcm, n]);
     if (!force && sig === signature) return;
     signature = sig;
 
@@ -88,19 +91,22 @@ export function creer(ctx, params = {}) {
 
     vider(page,
       h('h1', { class: 'titre-page', text: 'QCM' }),
-      h('p', { class: 'chapeau', text: 'Format fac : 5 propositions, une ou plusieurs vraies. Ils ne comptent pas dans tes cartes acquises.' }),
+      h('p', { class: 'chapeau', text: 'Format fac : 5 propositions, une ou plusieurs vraies. Ils ne comptent pas dans tes cartes acquises.' }),
       h('section', { class: 'bloc-seance' },
         h('h2', { class: 'sous-titre', text: 'Mélange des cours vus' }),
         melange.length
           ? h('p', { class: 'chiffres', text: `${nb(melange.length, 'question')} · environ ${melange.length} min${dus ? ` · dont ${dus} à refaire aujourd'hui` : ''}` })
-          : h('p', { class: 'aide', text: proposables.length ? 'Rien de neuf dans les cours que tu as commencés. Choisis un cours ci-dessous.' : 'Pas encore de QCM. Ils arrivent pour les cours commencés en cartes.' }),
+          : h('p', { class: 'aide', text: !proposables.length ? 'Pas encore de QCM. Ils arrivent pour les cours commencés en cartes.'
+            : dejaFaits ? 'Tous tes QCM du moment sont faits. D\'autres arriveront avec les prochains cours.'
+              : 'Rien de neuf dans les cours que tu as commencés. Choisis un cours ci-dessous.' }),
         h('p', { class: 'aide', text: baremeTexte(r.baremeQcm) })),
       h('details', { class: 'details choix-cours', open: choixOuvert ?? !melange.length },
         h('summary', { onclick: e => { choixOuvert = !e.currentTarget.parentElement.open; } }, `Choisir un cours (${cours.length})`),
-        cle ? h('p', { class: 'aide', text: '« Générer 5 QCM » : Gemini les écrit à partir de tes cartes et de la fiche, puis un second passage les vérifie (environ 30 s).' })
-          : h('p', { class: 'aide' }, 'Pour générer des QCM : ajoute ta clé Gemini dans ', h('button', { type: 'button', class: 'lien', text: 'Réglages', onclick: () => ctx.aller('reglages', { section: 'cles' }) }), '.'),
+        cle ? h('p', { class: 'aide', text: '« Générer 5 QCM » : Gemini les écrit à partir de tes cartes et de la fiche, puis un second passage les vérifie (environ 30 s).' })
+          : h('p', { class: 'aide' }, 'Pour générer des QCM : ajoute ta clé Gemini dans ', h('button', { type: 'button', class: 'lien', text: 'Réglages', onclick: () => ctx.aller('reglages', { section: 'cles' }) }), '.'),
         h('ul', { class: 'liste-cours' }, lignes)));
-    vider(barre, melange.length ? bouton(`Commencer · ${nb(melange.length, 'QCM', 'QCM')}`, { principal: true, onClick: () => demarrerSerie({}) }) : null);
+    vider(barre, melange.length ? bouton(`Commencer · ${nb(melange.length, 'QCM', 'QCM')}`, { principal: true, onClick: () => demarrerSerie({}) })
+      : reussis.length ? bouton('Refaire des QCM déjà réussis', { onClick: () => demarrerSerie({ choix: 'reussis' }) }) : null);
     actionEntree = melange.length ? () => demarrerSerie({}) : null;
   }
 
@@ -137,17 +143,18 @@ export function creer(ctx, params = {}) {
       }
       const texte = prets ? `${nb(prets, 'QCM prêt', 'QCM prêts')}${ecartes ? ` (${ecartes} écarté${ecartes > 1 ? 's' : ''} au contrôle)` : ''}.` : 'Aucun QCM n\'a passé le contrôle. Réessaie plus tard.';
       etat('fini', texte, prets);
-      toast(`${nomCours(d, cours)} : ${texte}`);
+      toast(`${nomCours(d, cours)} : ${texte}`);
     } catch (e) {
-      etat('erreur', `${e?.message || 'Gemini n\'a pas pu préparer les QCM.'} Réessaie plus tard.`);
+      etat('erreur', `${e?.message || 'Gemini n\'a pas pu préparer les QCM.'}${/Réessaie/.test(e?.message || '') ? '' : ' Réessaie plus tard.'}`);
     }
   }
 
   // ---------- Série ----------
-  function demarrerSerie({ cours = null }) {
+  // Mélange (sans cours) : dus et jamais faits ; un cours choisi : tous ses QCM ; 'reussis' : à refaire.
+  function demarrerSerie({ cours = null, choix = cours ? 'tout' : 'a-faire' }) {
     const d = ctx.donnees();
     const n = Number(d.reglages.qcmParSeance) || 8;
-    const questions = choisirQcm(d, ctx.maintenant(), { n, cours });
+    const questions = choisirQcm(d, ctx.maintenant(), { n, cours, choix });
     if (!questions.length) { toast('Pas de QCM à faire pour le moment.'); return; }
     serie = { questions, i: 0, resultats: [], cours };
     mode = 'serie';
@@ -210,7 +217,7 @@ export function creer(ctx, params = {}) {
     ctx.sync.ajouter({ type: 'qcm-reponse', ligne });
     serie.resultats.push({ q, resultat });
     const e = etatQcm(q.id, ctx.donnees().qcmJournal);
-    const retour = e.etape === 'fini' ? 'Acquis : il ne reviendra plus.' : e.etape === 2 ? 'Revient dans 7 jours.' : 'Revient dans 2 jours.';
+    const retour = e.etape === 'fini' ? 'Acquis : il ne reviendra plus.' : e.etape === 2 ? 'Revient dans 7 jours.' : 'Revient dans 2 jours.';
     const classe = resultat.points >= 1 ? 'juste' : resultat.points > 0 ? 'partiel' : 'faux';
     const titre = `${points(resultat.points)} · ${resultat.discordances === 0 ? 'sans faute' : nb(resultat.discordances, 'erreur')}`;
     const parLettre = new Map((q.propositions || []).map(p => [p.l, p]));
@@ -250,15 +257,15 @@ export function creer(ctx, params = {}) {
 
   function signaler(q, zone, lien) {
     lien.hidden = true;
-    const raison = h('textarea', { id: 'raison-qcm', class: 'reponse', rows: '2', placeholder: 'Ex. : la B est vraie d\'après la fiche', spellcheck: 'false' });
+    const raison = h('textarea', { id: 'raison-qcm', class: 'reponse', rows: '2', placeholder: 'Ex. : la B est vraie d\'après la fiche', spellcheck: 'false' });
     const envoyer = bouton('Envoyer', { classe: 'btn--plein', onClick: () => {
       const t = ctx.maintenant();
       ctx.sync.ajouter({ type: 'a-revoir', cas: { id: `${ctx.appareil}-${t}`, ts: t, type: 'qcm-signale', qcm: q.id, cours: q.cours, raison: raison.value.trim() || undefined } });
       ctx.sync.ajouter({ type: 'qcm-statut', cours: q.cours, id: q.id, statut: 'signale', maj: t });
-      vider(zone, h('p', { class: 'issue issue--ok', role: 'status' }, icone('juste'), 'Merci : ce QCM est mis de côté. Claude le vérifiera.'));
+      vider(zone, h('p', { class: 'issue issue--ok', role: 'status' }, icone('juste'), 'Merci : ce QCM est mis de côté. Claude le vérifiera.'));
     } });
     vider(zone,
-      h('label', { for: 'raison-qcm', class: 'champ__libelle', text: "Qu'est-ce qui ne va pas ? (facultatif)" }),
+      h('label', { for: 'raison-qcm', class: 'champ__libelle', text: "Qu'est-ce qui ne va pas ? (facultatif)" }),
       raison,
       h('div', { class: 'rang-boutons' }, bouton('Annuler', { discret: true, onClick: () => { vider(zone); lien.hidden = false; } }), envoyer));
     raison.focus();
@@ -274,7 +281,7 @@ export function creer(ctx, params = {}) {
       h('div', { class: 'grand-compteur' },
         h('p', { class: 'grand-compteur__chiffre', text: `${virgule(total)} / ${serie.resultats.length}` }),
         h('p', { class: 'grand-compteur__texte', text: `points sur ${nb(serie.resultats.length, 'QCM', 'QCM')}` })),
-      rates ? h('p', { class: 'chapeau', text: `${nb(rates, 'QCM raté', 'QCM ratés')} : ${rates > 1 ? 'ils reviendront' : 'il reviendra'} dans 2 jours.` })
+      rates ? h('p', { class: 'chapeau', text: `${nb(rates, 'QCM raté', 'QCM ratés')} : ${rates > 1 ? 'ils reviendront' : 'il reviendra'} dans 2 jours.` })
         : serie.resultats.length ? h('p', { class: 'chapeau', text: 'Sans faute sur toute la série.' }) : null);
     vider(barre, bouton('Retour', { principal: true, onClick: fermerSerie }));
     actionEntree = fermerSerie;

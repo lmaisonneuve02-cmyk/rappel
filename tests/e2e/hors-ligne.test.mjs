@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { jourParis } from '../../js/temps.js';
 import { VERSION } from '../../js/config.js';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, carteDeQuestion, fichiersDepot, attendre } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, carteDeQuestion, fichiersDepot, attendre, texte } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -27,6 +27,24 @@ test('hors ligne : l\'appli s\'ouvre sans réseau, la réponse est gardée puis 
     await attendre(() => page.evaluate(() => !!navigator.serviceWorker?.controller), { message: 'service worker actif' });
     await attendre(() => page.evaluate(async v => (await (await caches.open(`rappel-v${v}`)).keys()).length >= 30, VERSION),
       { message: 'coquille en cache' });
+
+    // Servie sous /rappel/ (comme sur GitHub Pages) : portée du service worker, manifeste, icônes et coquille en cache.
+    assert.match(serveur.base, /\/rappel\/$/);
+    const pwa = await page.evaluate(async v => {
+      const lien = document.querySelector('link[rel="manifest"]').href;
+      const m = await (await fetch(lien)).json();
+      const icones = [...m.icons.map(i => new URL(i.src, lien).href),
+        ...[...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map(l => l.href)];
+      const cache = await caches.open(`rappel-v${v}`);
+      return {
+        portee: (await navigator.serviceWorker.getRegistration()).scope,
+        start: new URL(m.start_url, lien).href, scope: new URL(m.scope, lien).href,
+        icones: (await Promise.all(icones.map(async u => [u, (await fetch(u)).status]))).filter(([u, s]) => s !== 200 || !u.includes('/rappel/icons/')),
+        horsAppli: (await cache.keys()).map(r => r.url).filter(u => !u.startsWith(location.origin + '/rappel/')),
+      };
+    }, VERSION);
+    assert.deepEqual(pwa, { portee: serveur.base, start: serveur.base, scope: serveur.base, icones: [], horsAppli: [] });
+    assert.deepEqual(serveur.introuvables, [], 'aucun fichier demandé hors de /rappel/ ni introuvable');
     // Un rechargement en ligne fait passer la feuille des polices par le service worker (mise en cache).
     await page.reload();
     await bloc();
@@ -45,11 +63,11 @@ test('hors ligne : l\'appli s\'ouvre sans réseau, la réponse est gardée puis 
     // Une réponse, corrigée sur l'appareil.
     await page.locator('.barre-action .btn--principal', { hasText: 'Commencer' }).click();
     await page.locator('#reponse').waitFor();
-    const carte = carteDeQuestion(await page.locator('.page--seance h1.question').textContent());
+    const carte = carteDeQuestion(await texte(page.locator('.page--seance h1.question')));
     await page.fill('#reponse', REPONSES[carte.id]);
     await clic(page, 'Corriger');
     await page.locator('.page--seance .verdict').waitFor();
-    assert.equal(await page.locator('.verdict__mot').textContent(), 'Juste');
+    assert.equal(await texte(page.locator('.verdict__mot')), 'Juste');
     await page.locator('.badge', { hasText: 'Corrigé hors ligne' }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     assert.equal(o.requetesGemini.length, 0, 'Gemini n\'est pas appelé hors ligne');

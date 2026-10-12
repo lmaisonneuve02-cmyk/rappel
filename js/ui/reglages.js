@@ -15,8 +15,8 @@ function reglerNombre({ id, libelle, aide, valeur, min, max, pas = 1, decimales 
   const affiche = h('output', { class: 'reglage-nombre__valeur', id: `${id}-valeur`, 'aria-live': 'polite' });
   const montrer = () => { affiche.textContent = `${String(v.toFixed(decimales)).replace('.', ',')}${unite}`; moins.disabled = v <= min; plus.disabled = v >= max; };
   const changer = d => { v = Math.min(max, Math.max(min, Math.round((v + d) * 100) / 100)); montrer(); onChange(v); };
-  const moins = h('button', { type: 'button', class: 'btn-icone btn-icone--cadre', 'aria-label': `Moins : ${libelle}`, onclick: () => changer(-pas), text: '−' });
-  const plus = h('button', { type: 'button', class: 'btn-icone btn-icone--cadre', 'aria-label': `Plus : ${libelle}`, onclick: () => changer(pas), text: '+' });
+  const moins = h('button', { type: 'button', class: 'btn-icone btn-icone--cadre', 'aria-label': `Moins : ${libelle}`, onclick: () => changer(-pas), text: '−' });
+  const plus = h('button', { type: 'button', class: 'btn-icone btn-icone--cadre', 'aria-label': `Plus : ${libelle}`, onclick: () => changer(pas), text: '+' });
   montrer();
   return h('div', { class: 'reglage' },
     h('div', { class: 'reglage__texte' }, h('p', { class: 'reglage__libelle', id: `${id}-libelle`, text: libelle }), aide ? h('p', { class: 'aide', text: aide }) : null),
@@ -37,7 +37,7 @@ function message(zone, texte, type = 'erreur') {
 export function texteDernierEchange(ms, maintenant) {
   if (!ms) return '';
   const jour = jourParis(ms);
-  return `Dernier échange avec le dépôt : ${jour === jourParis(maintenant) ? '' : jour.split('-').reverse().slice(0, 2).join('/') + ' '}${heureParis(ms)}.`;
+  return `Dernier échange avec le dépôt : ${jour === jourParis(maintenant) ? '' : jour.split('-').reverse().slice(0, 2).join('/') + ' '}${heureParis(ms)}.`;
 }
 
 export function creer(ctx, params = {}) {
@@ -75,7 +75,7 @@ export function creer(ctx, params = {}) {
       const depot = ctx.cles().depot;
       try {
         const r = await new ClientGitHub({ jeton, proprietaire: depot.proprietaire, depot: depot.depot, branche: depot.branche, fetch: ctx.fetch }).verifier();
-        if (r.ecriture === false) message(zone, 'Ce jeton peut lire mais pas enregistrer. Sur GitHub, mets « Contents » sur « Read and write ».');
+        if (r.ecriture === false) message(zone, 'Ce jeton peut lire mais pas enregistrer. Sur GitHub, mets « Contents » sur « Read and write ».');
         else {
           const nouveau = jeton !== ctx.cles().jeton;
           if (nouveau) ctx.definirCles({ jeton });
@@ -84,17 +84,17 @@ export function creer(ctx, params = {}) {
           majEtatCles();
         }
       } catch (e) {
-        message(zone, e?.code === 'jeton' ? 'GitHub refuse ce jeton. Recopie-le en entier : il commence par github_pat_.' : e?.message || 'La vérification n\'a pas abouti.');
+        message(zone, e?.code === 'jeton' ? 'GitHub refuse ce jeton. Recopie-le en entier : il commence par github_pat_.' : e?.message || 'La vérification n\'a pas abouti.');
       } finally { verifier.disabled = false; libeller(verifier, 'Vérifier'); }
     } });
-    const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
+    const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
       ctx.definirCles({ jeton: '' }); message(zone, 'Jeton retiré de cet appareil.', 'info'); majEtatCles();
     }, { discret: true });
     retirer.hidden = !cles.jeton;
     const etat = h('p', { class: 'etat-cle' });
     const majEtatCles = () => {
       const j = !!ctx.cles().jeton;
-      etat.textContent = j ? 'Relié à tes données ✓' : 'Aucun jeton : Rappel ne peut pas lire tes cartes.';
+      etat.textContent = j ? 'Relié à tes données ✓' : 'Aucun jeton : Rappel ne peut pas lire tes cartes.';
       etat.className = ['etat-cle', j ? 'etat-cle--ok' : ''].join(' ');
       retirer.hidden = !j;
     };
@@ -108,12 +108,12 @@ export function creer(ctx, params = {}) {
     const { bloc, input } = champSecret({ id: 'r-gemini', libelle: 'Clé Gemini (facultative)',
       placeholder: cles.gemini ? 'Colle une nouvelle clé' : 'AQ.…' });
     const etat = h('p', { class: 'etat-cle' });
-    const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
-      ctx.definirCles({ gemini: '' }); message(zone, 'Clé retirée : la correction se fera sur ton appareil.', 'info'); maj();
+    const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
+      ctx.definirCles({ gemini: '' }); message(zone, 'Clé retirée : la correction se fera sur ton appareil.', 'info'); maj();
     }, { discret: true });
     const maj = () => {
       const g = !!ctx.cles().gemini;
-      etat.textContent = g ? 'Correction par Gemini ✓' : "Pas de clé : correction sur l'appareil, moins fine.";
+      etat.textContent = g ? 'Correction par Gemini ✓' : "Pas de clé : correction sur l'appareil, moins fine.";
       etat.className = ['etat-cle', g ? 'etat-cle--ok' : ''].join(' ');
       retirer.hidden = !g;
     };
@@ -124,7 +124,7 @@ export function creer(ctx, params = {}) {
       try {
         await verifierCle({ cle, fetch: ctx.fetch, modele: ctx.reglages().modeles?.correction || undefined });
         ctx.definirCles({ gemini: cle }); input.value = '';
-        message(zone, 'Gemini répond : clé enregistrée.', 'ok');
+        message(zone, 'Gemini répond : clé enregistrée.', 'ok');
       } catch (e) {
         if (e?.code === 'quota') { ctx.definirCles({ gemini: cle }); input.value = ''; message(zone, 'Clé valide, mais la limite gratuite est atteinte pour l\'instant.', 'info'); }
         else message(zone, e?.code === 'cle' ? 'Google refuse cette clé. Recopie-la depuis AI Studio.' : e?.message || 'Gemini ne répond pas.');
@@ -132,7 +132,7 @@ export function creer(ctx, params = {}) {
     } });
     maj();
     return h('div', { class: 'bloc-cle' }, etat, bloc, h('div', { class: 'rang-boutons' }, retirer, verifier), zone,
-      h('p', { class: 'aide' }, 'Pour en obtenir une : ', h('a', { href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener noreferrer', text: 'AI Studio' }), ', « Create API key ».'));
+      h('p', { class: 'aide' }, 'Pour en obtenir une : ', h('a', { href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener noreferrer', text: 'AI Studio' }), ', « Create API key ».'));
   }
 
   // --- Ordre des paquets ---
@@ -219,7 +219,7 @@ export function creer(ctx, params = {}) {
     const zone = h('div', { class: 'zone-message', 'aria-live': 'polite' });
     const tester = cas?.length ? bouton('Tester la correction', { classe: 'btn--plein', onClick: () => calibrer(cas, zone, tester) }) : null;
     return [
-      h('details', { class: 'details' }, h('summary', null, 'Avancé : modèles Gemini'),
+      h('details', { class: 'details' }, h('summary', null, 'Avancé : modèles Gemini'),
         h('p', { class: 'aide', text: 'Laisse vide pour garder le modèle conseillé.' }),
         champModele('r-modele-correction', 'Modèle de correction', 'correction'),
         champModele('r-modele-contestation', 'Modèle du second avis et des QCM', 'contestation')),
@@ -233,7 +233,7 @@ export function creer(ctx, params = {}) {
   async function calibrer(cas, zone, btn) {
     const g = ctx.gemini();
     if (!g.cle) { message(zone, 'Ajoute d\'abord ta clé Gemini, plus haut.'); return; }
-    if (!ctx.enLigne()) { message(zone, 'Pas de connexion : réessaie une fois connecté.'); return; }
+    if (!ctx.enLigne()) { message(zone, 'Pas de connexion : réessaie une fois connecté.'); return; }
     btn.disabled = true;
     const d = ctx.donnees();
     const modele = d.reglages.modeles?.correction || MODELES_DEFAUT.correction;
@@ -247,7 +247,7 @@ export function creer(ctx, params = {}) {
       for (let essai = 0; essai < 2 && !r; essai++) {
         try { r = await corrigerGemini(entree.carte, c.reponse, contexte, { cle: g.cle, modele, fetch: g.fetch }); erreur = null; } catch (e) {
           erreur = e?.code || 'inconnue';
-          if (e?.code === 'quota' && essai === 0) { message(zone, 'Limite de Gemini : je patiente un peu…', 'info'); await new Promise(ok => setTimeout(ok, Math.min(60000, e.attente || 20000))); }
+          if (e?.code === 'quota' && essai === 0) { message(zone, 'Limite de Gemini : je patiente un peu…', 'info'); await new Promise(ok => setTimeout(ok, Math.min(60000, e.attente || 20000))); }
           else if (e?.code === 'cle') { message(zone, e.message); btn.disabled = false; return; }
           else break;
         }
@@ -263,9 +263,9 @@ export function creer(ctx, params = {}) {
     const desaccords = jugees.filter(x => x.obtenu !== x.attendu);
     vider(zone,
       h('p', { class: 'message message--ok', role: 'status' }, icone('juste'),
-        h('span', { text: accord == null ? 'Gemini n\'a jugé aucune réponse.' : `Accord : ${Math.round(accord * 100)} % (${accords} sur ${jugees.length}). Résultat enregistré.` })),
+        h('span', { text: accord == null ? 'Gemini n\'a jugé aucune réponse.' : `Accord : ${Math.round(accord * 100)} % (${accords} sur ${jugees.length}). Résultat enregistré.` })),
       desaccords.length ? h('ul', { class: 'liste-simple liste-simple--petite' }, desaccords.map(x =>
-        h('li', { text: `${x.carte} : attendu ${x.attendu}, Gemini ${x.obtenu} · « ${String(x.reponse).slice(0, 80)} »` }))) : null);
+        h('li', { text: `${x.carte} : attendu ${x.attendu}, Gemini ${x.obtenu} · « ${String(x.reponse).slice(0, 80)} »` }))) : null);
     btn.disabled = false;
   }
 
@@ -275,13 +275,13 @@ export function creer(ctx, params = {}) {
     const majEtat = () => {
       const s = ctx.sync.etat;
       const derniere = texteDernierEchange(s.derniereSynchro, ctx.maintenant());
-      vider(etatTexte, h('strong', { text: s.message || '' }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
+      vider(etatTexte, h('strong', { text: ctx.messageEtat?.(s) ?? s.message ?? '' }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
       etatTexte.dataset.mode = s.mode;
     };
     majEtat();
-    const synchroniser = bouton('Synchroniser maintenant', { classe: 'btn--plein', onClick: async () => {
-      synchroniser.disabled = true;
-      try { await ctx.sync.pousser('manuel'); await ctx.sync.rafraichir('manuel'); } finally { synchroniser.disabled = false; majEtat(); }
+    const envoyer = bouton('Envoyer maintenant', { classe: 'btn--plein', onClick: async () => {
+      envoyer.disabled = true;
+      try { await ctx.sync.pousser('manuel'); await ctx.sync.rafraichir('manuel'); } finally { envoyer.disabled = false; majEtat(); }
     } });
 
     const nom = h('input', { id: 'r-appareil', type: 'text', class: 'champ-texte', value: ctx.appareil, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: '24' });
@@ -297,9 +297,9 @@ export function creer(ctx, params = {}) {
       const n = idDepot(ctx.cles().depot) !== idDepot(nouveau) ? ctx.sync.etat.attente || 0 : 0;
       const s = n > 1 ? 's' : '';
       ctx.definirCles({ depot: nouveau });
-      message(zoneDepot, n ? `${texte} ${nb(n, 'réponse')} pas encore envoyée${s} reste${n > 1 ? 'nt' : ''} gardée${s} pour l'ancien dépôt : envoi quand tu y reviendras.` : texte, 'ok');
+      message(zoneDepot, n ? `${texte} ${nb(n, 'réponse')} pas encore envoyée${s} reste${n > 1 ? 'nt' : ''} gardée${s} pour l'ancien dépôt : envoi quand tu y reviendras.` : texte, 'ok');
     };
-    const blocDepot = h('details', { class: 'details' }, h('summary', null, 'Avancé : dépôt'),
+    const blocDepot = h('details', { class: 'details' }, h('summary', null, 'Avancé : dépôt'),
       champ('r-proprietaire', 'Propriétaire', depot.proprietaire), champ('r-depot', 'Dépôt', depot.depot),
       champ('r-branche', 'Branche', depot.branche), champ('r-racine', 'Dossier', depot.racine),
       h('div', { class: 'rang-boutons' },
@@ -308,7 +308,7 @@ export function creer(ctx, params = {}) {
           const v = id => blocDepot.querySelector('#' + id).value.trim();
           const nouveau = { proprietaire: v('r-proprietaire'), depot: v('r-depot'), branche: v('r-branche') || 'main', racine: v('r-racine') };
           if (!nouveau.proprietaire || !nouveau.depot) { message(zoneDepot, 'Indique le propriétaire et le nom du dépôt.'); return; }
-          changerDepot(nouveau, 'Dépôt enregistré : je recharge tes cartes.');
+          changerDepot(nouveau, 'Dépôt enregistré : je recharge tes cartes.');
         } })),
       zoneDepot);
 
@@ -320,7 +320,7 @@ export function creer(ctx, params = {}) {
       const perte = n ? `${nb(n, 'réponse')} pas encore envoyée${n > 1 ? 's' : ''} ser${n > 1 ? 'ont' : 'a'} perdue${n > 1 ? 's' : ''}` : '';
       const recoller = cles ? `il faudra recoller ${cles}` : '';
       const suite = [perte, recoller].filter(Boolean).join(', et ');
-      return `Effacer ? ${suite ? suite.charAt(0).toUpperCase() + suite.slice(1) + '.' : 'Tes données envoyées restent dans ton dépôt.'} Touche encore.`;
+      return `Effacer ? ${suite ? suite.charAt(0).toUpperCase() + suite.slice(1) + '.' : 'Tes données envoyées restent dans ton dépôt.'} Touche encore.`;
     };
     const effacer = boutonConfirme('Effacer les données de cet appareil', avertissement, async () => {
       // Dernier essai d'envoi : seules les réponses qui n'ont pas pu partir sont perdues.
@@ -335,7 +335,7 @@ export function creer(ctx, params = {}) {
     return {
       noeuds: [
         etatTexte,
-        h('div', { class: 'rang-boutons rang-boutons--gauche' }, synchroniser),
+        h('div', { class: 'rang-boutons rang-boutons--gauche' }, envoyer),
         h('div', { class: 'champ' }, h('label', { for: 'r-appareil', class: 'champ__libelle', text: 'Nom de cet appareil' }), nom,
           h('p', { class: 'aide', text: 'Il apparaît dans tes réponses, pour savoir d\'où elles viennent.' })),
         blocDepot,
@@ -362,11 +362,11 @@ export function creer(ctx, params = {}) {
       section('rythme', 'Rythme',
         reglerNombre({ id: 'r-nouvelles', libelle: 'Nouvelles cartes par jour', aide: 'Combien de cartes jamais vues te sont proposées.', valeur: r.nouvellesParJour, min: 0, max: 200, pas: 5, onChange: v => enregistrer({ nouvellesParJour: v }) }),
         reglerNombre({ id: 'r-objectif', libelle: 'Objectif du jour', aide: 'Cartes acquises visées.', valeur: r.objectifJour, min: 5, max: 200, pas: 5, onChange: v => enregistrer({ objectifJour: v }) }),
-        reglerNombre({ id: 'r-pause', libelle: 'Pause proposée toutes les', aide: '0 : jamais de pause.', valeur: r.pauseToutes, min: 0, max: 100, pas: 5, unite: ' cartes', onChange: v => enregistrer({ pauseToutes: v }) }),
+        reglerNombre({ id: 'r-pause', libelle: 'Pause proposée toutes les', aide: '0 : jamais de pause.', valeur: r.pauseToutes, min: 0, max: 100, pas: 5, unite: ' cartes', onChange: v => enregistrer({ pauseToutes: v }) }),
         blocOrdre()),
       section('qcm', 'QCM',
         reglerNombre({ id: 'r-qcm', libelle: 'QCM par série', valeur: r.qcmParSeance, min: 1, max: 30, pas: 1, onChange: v => enregistrer({ qcmParSeance: v }) }),
-        h('details', { class: 'details' }, h('summary', null, 'Avancé : barème'),
+        h('details', { class: 'details' }, h('summary', null, 'Avancé : barème'),
           h('p', { class: 'aide', text: 'Points pour 0, 1, 2, puis 3 erreurs ou plus.' }),
           h('div', { class: 'bareme' }, (r.baremeQcm || [1, 0.5, 0.2, 0]).map((x, i) => {
             const id = `r-bareme-${i}`;

@@ -4,7 +4,7 @@ import { corriger, contester } from '../correction.js';
 import { corrigerLocal } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
 import { clozeParts, refText } from '../texte.js';
-import { qcmProposables } from '../qcm.js';
+import { choisirQcm } from '../qcm.js';
 import { Ecoute, reconnaissanceDisponible, messageEcoute } from '../voix.js';
 import {
   h, vider, bouton, libeller, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
@@ -67,7 +67,7 @@ export function creer(ctx, params = {}) {
   const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance });
   const objectifAuDepart = ctx.acquises() >= ctx.objectif();
   let objectifAnnonce = objectifAuDepart;
-  let geminiPrevenu = false;
+  const geminiPrevenu = new Set();   // codes d'erreur de Gemini déjà signalés dans cette séance
   let etat = 'debut';
   let actionEntree = null;    // ce que fait la touche Entrée dans l'état courant
   let touches = null;         // raccourcis 1/2/3 de l'auto-évaluation
@@ -162,7 +162,7 @@ export function creer(ctx, params = {}) {
     vider(contenu,
       h('p', { class: 'surtitre surtitre--veineux', text: 'Avant les nouvelles cartes' }),
       h('div', { class: 'feuille-fiche' }, ficheNoeud(fiche)),
-      ensuite ? h('p', { class: 'aide', text: `Ensuite : ${nb(ensuite, 'nouvelle carte', 'nouvelles cartes')} de ce cours.` }) : null);
+      ensuite ? h('p', { class: 'aide', text: `Ensuite : ${nb(ensuite, 'nouvelle carte', 'nouvelles cartes')} de ce cours.` }) : null);
     const lu = () => { seance.ficheVue(); suivant(); };
     vider(barre, bouton("J'ai lu, on y va", { principal: true, onClick: lu }));
     actionEntree = lu;
@@ -175,9 +175,9 @@ export function creer(ctx, params = {}) {
     etat = 'pause';
     majHaut();
     vider(contenu,
-      h('h1', { class: 'titre-page', tabindex: '-1', text: `${e.faites} cartes faites. Une pause ?` }),
-      h('p', { class: 'chiffres', text: `${e.minutes} min · acquises : ${ctx.acquises()}/${ctx.objectif()}` }),
-      h('p', { class: 'chapeau', text: 'Ton attention baisse avant que tu la sentes baisser. Cinq minutes loin de l\'écran, puis tu reprends. Ou tu t\'arrêtes là : les cartes restantes attendront.' }));
+      h('h1', { class: 'titre-page', tabindex: '-1', text: `${e.faites} cartes faites. Une pause ?` }),
+      h('p', { class: 'chiffres', text: `${e.minutes} min · acquises : ${ctx.acquises()}/${ctx.objectif()}` }),
+      h('p', { class: 'chapeau', text: 'Ton attention baisse avant que tu la sentes baisser. Cinq minutes loin de l\'écran, puis tu reprends. Ou tu t\'arrêtes là : les cartes restantes attendront.' }));
     const continuer = () => { seance.continuer(); suivant(); };
     vider(barre, h('div', { class: 'barre-action__rang' },
       bouton("M'arrêter là", { onClick: () => afficherFin() }),
@@ -220,14 +220,14 @@ export function creer(ctx, params = {}) {
       imageSvg(carte.svg),
       h('div', { class: ['champ-reponse', btnMicro && 'champ-reponse--micro'] }, champ, btnMicro),
       statut,
-      montrerAide ? h('p', { class: 'aide', text: 'Quelques mots suffisent, même incomplet. Réponse dans ta tête ? Champ vide, touche « Voir la réponse » et note-toi.' }) : null,
-      !micro && montrerAide ? h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter.') : null,
-      h('p', { class: 'aide aide--pc', text: 'Entrée : corriger · Maj+Entrée : à la ligne' }));
+      montrerAide ? h('p', { class: 'aide', text: 'Quelques mots suffisent, même incomplet. Réponse dans ta tête ? Champ vide, touche « Voir la réponse » et note-toi.' }) : null,
+      !micro && montrerAide ? h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter.') : null,
+      h('p', { class: 'aide aide--pc', text: 'Entrée : corriger · Maj+Entrée : à la ligne' }));
     vider(barre, h('div', { class: 'barre-action__rang barre-action__rang--carte' }, nsp, principal));
 
     actionEntree = () => {
       if (champ.value.trim()) corrigerCarte(e, champ.value);
-      else { statut.textContent = 'Écris ta réponse, ou touche « Voir la réponse ».'; statut.className = 'statut-micro'; }
+      else { statut.textContent = 'Écris ta réponse, ou touche « Voir la réponse ».'; statut.className = 'statut-micro'; }
     };
     // Sur PC le champ prend le focus ; sur téléphone, seulement si le clavier était ouvert (pas sur la 1re carte).
     if (!estTactile() || clavierOuvert) champ.focus({ preventScroll: true });
@@ -297,14 +297,19 @@ export function creer(ctx, params = {}) {
     return v;
   }
 
+  // Quand la carte revient : ratée, 4 cartes plus loin dans cette séance (pas « dans 10 min »).
+  function quandRevient(v, maintenant) {
+    return v.resultat.verdict === 'faux' ? 'revient un peu plus loin dans la séance' : delaiTexte(v.etatApres, maintenant);
+  }
+
   // Ce que la réponse change au compteur, dit en clair.
   function effet(v) {
     const obj = ctx.objectif();
     const n = ctx.acquises();
-    if (n > v.avant) return `+1 acquise : ${n}/${obj}`;
-    if (v.resultat.verdict !== 'faux') return `Déjà comptée aujourd'hui : ${n}/${obj}`;
-    if (n < v.avant) return 'Elle ne compte plus pour l\'instant : réussis-la quand elle revient.';
-    return 'Ne compte pas encore : réussis-la quand elle revient.';
+    if (n > v.avant) return `+1 acquise : ${n}/${obj}`;
+    if (v.resultat.verdict !== 'faux') return `Déjà comptée aujourd'hui : ${n}/${obj}`;
+    if (n < v.avant) return 'Elle ne compte plus pour l\'instant : réussis-la quand elle revient.';
+    return 'Ne compte pas encore : réussis-la quand elle revient.';
   }
 
   // Ajuste la séance après une contestation acceptée (la carte ratée ne doit plus revenir).
@@ -321,7 +326,7 @@ export function creer(ctx, params = {}) {
     const r = v.resultat;
     const nsp = r.correcteur === 'je-ne-sais-pas';
     const maintenant = ctx.maintenant();
-    const delai = majuscule(delaiTexte(v.etatApres, maintenant)) + '.';
+    const delai = majuscule(quandRevient(v, maintenant)) + '.';
     const ligneEffet = effet(v);
     const fiche = ficheDe(donnees, carte, paquet);
     const cles = ctx.cles();
@@ -329,10 +334,10 @@ export function creer(ctx, params = {}) {
       && !['auto', 'je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne();
 
     const bandeauVerdict = verdictNoeud(r, { lignes: nsp
-      ? [`Pas grave. ${delai}`, h('p', { class: 'verdict__effet', text: 'Réussis-la à ce moment-là : elle comptera.' })]
+      ? [`Pas grave. ${delai}`, h('p', { class: 'verdict__effet', text: 'Réussis-la à ce moment-là : elle comptera.' })]
       : [delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
     const attendue = h('section', { class: 'bloc-liste' }, h('h3', { class: 'petit-titre', text: 'Réponse attendue' }), reponseAttendue(carte));
-    const taReponse = v.reponse ? h('section', { class: 'bloc-liste bloc-liste--doux' }, h('h3', { class: 'petit-titre', text: 'Ta réponse' }), h('p', { class: 'ta-reponse', text: `« ${v.reponse} »` })) : null;
+    const taReponse = v.reponse ? h('section', { class: 'bloc-liste bloc-liste--doux' }, h('h3', { class: 'petit-titre', text: 'Ta réponse' }), h('p', { class: 'ta-reponse', text: `« ${v.reponse} »` })) : null;
     const trouvees = liste('Ce que tu as dit de juste', r.idees_trouvees, 'bloc-liste--juste');
     const manque = nsp ? null : liste('Ce qui manquait', r.idees_manquantes, 'bloc-liste--manque');
     const erreurs = liste('Erreur', r.erreurs, 'bloc-liste--erreur');
@@ -354,17 +359,18 @@ export function creer(ctx, params = {}) {
     const pied = (badge || lienConteste) ? h('div', { class: 'pied-verdict' }, badge ? h('span', { class: 'badge', text: badge }) : null, lienConteste) : null;
 
     const notes = [];
-    if (r.erreurGemini) {
-      const msg = r.erreurGemini.message || 'Gemini ne répond pas.';
-      notes.push(h('p', { class: 'note-correcteur' }, icone('info'), `${msg.replace(/\s*$/, '')} Je corrige sur ton appareil.`));
-      if (!geminiPrevenu) { geminiPrevenu = true; toast(`${msg} Je corrige sur ton appareil.`); }
+    // Gemini indisponible : un seul message bref (le badge du verdict dit déjà qui a corrigé).
+    if (r.erreurGemini && !geminiPrevenu.has(r.erreurGemini.code)) {
+      geminiPrevenu.add(r.erreurGemini.code);
+      toast(r.erreurGemini.code === 'quota' ? 'Gemini est saturé pour l\'instant : correction faite sur ton appareil.'
+        : `${(r.erreurGemini.message || 'Gemini ne répond pas.').replace(/\s*$/, '')} Je corrige sur ton appareil.`, { duree: 5000 });
     }
     if (v.issue) notes.push(h('p', { class: ['issue', v.issue.ok ? 'issue--ok' : 'issue--non'], role: 'status' }, icone(v.issue.ok ? 'juste' : 'info'), v.issue.texte));
     let terminerIci = null;
     if (!objectifAnnonce && ctx.acquises() >= ctx.objectif()) {
       objectifAnnonce = true;
       terminerIci = h('button', { type: 'button', class: 'lien', text: "M'arrêter là", onclick: () => afficherFin() });
-      notes.push(bandeau(`Objectif du jour atteint : ${ctx.acquises()} cartes acquises. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
+      notes.push(bandeau(`Objectif du jour atteint : ${ctx.acquises()} cartes acquises. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
     }
 
     vider(contenu,
@@ -372,7 +378,7 @@ export function creer(ctx, params = {}) {
       bandeauVerdict,
       notes,
       corps,
-      fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
+      fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
       pied,
       zoneContestation);
 
@@ -389,14 +395,14 @@ export function creer(ctx, params = {}) {
 
   function ouvrirContestation(v, zone, lien) {
     lien.hidden = true;
-    const raison = h('textarea', { id: 'raison', class: 'reponse', rows: '2', placeholder: 'Ex. : RAo = rétrécissement aortique', autocomplete: 'off', spellcheck: 'false' });
+    const raison = h('textarea', { id: 'raison', class: 'reponse', rows: '2', placeholder: 'Ex. : RAo = rétrécissement aortique', autocomplete: 'off', spellcheck: 'false' });
     const statut = h('p', { class: 'statut-micro', 'aria-live': 'polite' });
     const btnMicro = brancherMicro(raison, statut);
     const envoyer = bouton('Demander un second avis', { classe: 'btn--plein', onClick: lancer });
     const annuler = bouton('Annuler', { discret: true, onClick: () => { vider(zone); lien.hidden = false; arreterMicro(); } });
     raison.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); lancer(); } });
     vider(zone,
-      h('label', { for: 'raison', class: 'champ__libelle', text: 'Pourquoi ta réponse est juste ? (facultatif)' }),
+      h('label', { for: 'raison', class: 'champ__libelle', text: 'Pourquoi ta réponse est juste ? (facultatif)' }),
       h('div', { class: ['champ-reponse', btnMicro && 'champ-reponse--micro'] }, raison, btnMicro),
       statut,
       h('div', { class: 'rang-boutons' }, annuler, envoyer));
@@ -425,15 +431,15 @@ export function creer(ctx, params = {}) {
           corrigerSeance(v, ancien, c.resultat.verdict);
           v.resultat = c.resultat;
           if (c.etatApres) v.etatApres = c.etatApres;
-          v.issue = { ok: true, texte: `Tu avais raison : verdict corrigé en « ${mot} ».` };
+          v.issue = { ok: true, texte: `Tu avais raison : verdict corrigé en « ${mot} ».` };
         } else {
           const expl = c.resultat?.explication || c.avis?.explication || '';
-          v.issue = { ok: false, texte: `Le second avis maintient « ${mot} ».${expl ? ' ' + expl : ''}` };
+          v.issue = { ok: false, texte: `Le second avis maintient « ${mot} ».${expl ? ' ' + expl : ''}` };
         }
         if (etat === 'verdict' && verdictAffiche === v && !quitte) afficherVerdict(v);
         else {
           // Il est déjà passé à la suite : l'issue est signalée sans le ramener en arrière.
-          toast(c.accepte ? `Second avis : tu avais raison, verdict corrigé en « ${mot} ».` : `Second avis : « ${mot} » est maintenu.`, { duree: 5000 });
+          toast(c.accepte ? `Second avis : tu avais raison, verdict corrigé en « ${mot} ».` : `Second avis : « ${mot} » est maintenu.`, { duree: 5000 });
           if (etat === 'fin' && !quitte) rendreFin();
           else if (etat === 'carte' && c.accepte) {
             const suite = seance.etape();   // la reprise a pu disparaître : « Carte 2 sur 5 » au lieu de « sur 6 »
@@ -441,8 +447,8 @@ export function creer(ctx, params = {}) {
           }
         }
       } catch (err) {
-        const message = err?.name === 'ErreurGemini' ? `${err.message} Réessaie plus tard.` : 'Pas de second avis possible maintenant. Réessaie plus tard.';
-        if (!(etat === 'verdict' && verdictAffiche === v) || quitte) { toast(`Second avis : ${message}`, { duree: 5000 }); return; }
+        const message = err?.name === 'ErreurGemini' ? `${err.message}${/Réessaie/.test(err.message) ? '' : ' Réessaie plus tard.'}` : 'Pas de second avis possible maintenant. Réessaie plus tard.';
+        if (!(etat === 'verdict' && verdictAffiche === v) || quitte) { toast(`Second avis : ${message}`, { duree: 5000 }); return; }
         statut.className = 'statut-micro statut-micro--erreur';
         statut.textContent = message;
         envoyer.disabled = false;
@@ -461,8 +467,8 @@ export function creer(ctx, params = {}) {
     vider(contenu,
       questionNoeud(carte, { petite: true }),
       h('section', { class: 'bloc-liste bloc-liste--attendue' }, h('h2', { class: 'petit-titre', text: 'Réponse attendue', tabindex: '-1' }), reponseAttendue(carte)),
-      fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
-      h('p', { class: 'question-auto', text: "Tu l'avais ?" }),
+      fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
+      h('p', { class: 'question-auto', text: "Tu l'avais ?" }),
       h('p', { class: 'aide', text: 'Ta note règle quand la carte reviendra.' }),
       h('p', { class: 'aide aide--pc', text: 'Touches 1, 2, 3' }));
     const choisir = verdict => {
@@ -470,7 +476,7 @@ export function creer(ctx, params = {}) {
       etat = 'note';
       const resultat = { verdict, idees_trouvees: [], idees_manquantes: [], erreurs: [], confiance: 1, explication: '', correcteur: 'auto' };
       const v = noter(e, resultat, '', [], false);
-      const msg = `Noté : ${VERDICTS[verdict].mot.toLowerCase()} · ${delaiTexte(v.etatApres, ctx.maintenant())}. ${effet(v)}`;
+      const msg = `Noté : ${VERDICTS[verdict].mot.toLowerCase()} · ${quandRevient(v, ctx.maintenant())}. ${effet(v)}`;
       toast(msg, { duree: 2500 });
       annoncer(msg);
       suivant();
@@ -487,7 +493,7 @@ export function creer(ctx, params = {}) {
   function majLigneSynchro() {
     const s = ctx.sync.etat;
     ligneSynchro.dataset.mode = s.mode;
-    ligneSynchro.textContent = s.mode === 'a-jour' ? 'Tout est enregistré.' : s.message || '';
+    ligneSynchro.textContent = s.mode === 'a-jour' ? 'Tout est enregistré.' : ctx.messageEtat?.(s) ?? s.message ?? '';
   }
 
   function afficherFin() {
@@ -514,9 +520,11 @@ export function creer(ctx, params = {}) {
     // La carte en cours de correction ne compte plus parmi les restantes : sa réponse est donnée.
     const restantes = interrompue ? Math.max(0, seance.restantes() - (correctionEnCours ? 1 : 0)) : 0;
     const fiches = (b.fichesARelire || []).map(id => donnees.fiches[id]).filter(Boolean);
-    const qcm = qcmProposables(ctx.donnees()).length;
-    const nQcm = Math.min(qcm, Number(ctx.reglages().qcmParSeance) || 8);
-    const detail = [nb(b.faites, 'réponse'), nb(b.justes, 'juste'), nb(b.partielles, 'partielle'), nb(b.fausses, 'fausse'), `${b.minutes} min`].join(' · ');
+    // Même série que « Mélange » dans QCM : dus et jamais faits.
+    const nQcm = choisirQcm(ctx.donnees(), ctx.maintenant(), { n: Number(ctx.reglages().qcmParSeance) || 8, choix: 'a-faire' }).length;
+    // Compteurs à zéro omis (« 0 partielle · 0 fausse » n'apprend rien).
+    const detail = [nb(b.faites, 'réponse'), b.justes && nb(b.justes, 'juste'), b.partielles && nb(b.partielles, 'partielle'),
+      b.fausses && nb(b.fausses, 'fausse'), `${b.minutes} min`].filter(Boolean).join(' · ');
 
     vider(contenu,
       h('h1', { class: 'titre-page', tabindex: '-1', text: 'Séance terminée' }),

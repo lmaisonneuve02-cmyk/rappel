@@ -305,7 +305,8 @@ export function etatQcm(qcmId, journal)     // {tentatives, derniere, etape: 0|1
    // raté (points < 1) → due = ts + 2 j, etape 1 ; réussi à l'étape 1 → due = ts + 7 j, etape 2 ; réussi à l'étape 2 ou réussi d'emblée → 'fini' (due null) ; raté à n'importe quelle étape → étape 1
 export function qcmProposables(donnees)     // statut valide, ou brouillon vérifié ; jamais signalé
 export function coursVus(donnees)           // cours dont au moins une carte du paquet a un état
-export function choisirQcm(donnees, maintenant, {n, cours = null, rnd})  // dus d'abord (due < finJourParis), puis jamais faits des cours vus, puis les plus anciens ; mélangés
+export function choisirQcm(donnees, maintenant, {n, cours = null, choix = 'tout', rnd})  // dus d'abord (due < finJourParis), puis jamais faits des cours vus, puis les plus anciens ; mélangés.
+// choix 'a-faire' : dus et jamais faits seulement ; 'reussis' : QCM acquis, les plus anciens d'abord
 export function ligneQcm({qcm, cochees, resultat, duree, maintenant, appareil})   // ligne du journal
 ```
 
@@ -394,7 +395,7 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 - « Comment ça marche » (dépliable) : 6 phrases simples (rappel actif, espacement, correction, objectif, mains libres, synchro).
 
 ### Réglages (`ui/reglages.js`)
-Sections : **Mes clés** (jeton GitHub, clé Gemini : champ masqué + « Vérifier » + « Retirer » ; rappel : « gardées seulement sur cet appareil ») ; **Rythme** (nouvelles cartes par jour, objectif, ordre des paquets avec flèches monter/descendre) ; **QCM** (QCM par séance, barème : 4 nombres) ; **Voix** (voix française, vitesse avec bouton « Écouter », silence avant correction en secondes) ; **Correction** (modèles Gemini, avancé ; bouton « Tester la correction » → § 9) ; **Données** (état de synchro détaillé, « Synchroniser maintenant », nom de l'appareil, dépôt avancé, « Effacer les données de cet appareil » avec confirmation) ; version.
+Sections : **Mes clés** (jeton GitHub, clé Gemini : champ masqué + « Vérifier » + « Retirer » ; rappel : « gardées seulement sur cet appareil ») ; **Rythme** (nouvelles cartes par jour, objectif, ordre des paquets avec flèches monter/descendre) ; **QCM** (QCM par séance, barème : 4 nombres) ; **Voix** (voix française, vitesse avec bouton « Écouter », silence avant correction en secondes) ; **Correction** (modèles Gemini, avancé ; bouton « Tester la correction » → § 9) ; **Données** (état de synchro détaillé, « Envoyer maintenant », nom de l'appareil, dépôt avancé, « Effacer les données de cet appareil » avec confirmation) ; version.
 
 ### Mains libres (`ui/mainslibres.js`)
 Plein écran sombre et calme : grand indicateur d'état (« Je lis la question… », « Je t'écoute… » avec onde animée, « Correction… », verdict), texte de la question et de ta réponse en direct, compteur « Acquises X/30 », boutons très grands « Pause » / « Reprendre » et « Arrêter », aide-mémoire des commandes vocales toujours visible (« je ne sais pas · répète · suivant · pause · je conteste »). Écran maintenu allumé.
@@ -441,7 +442,7 @@ Réglages → Correction → « Tester la correction » (clé Gemini requise) : 
 - Méthodes publiques pour l'interface (qui ne lit ni `file`, ni `i`, ni les compteurs) : `restantes()` (cartes encore à faire, carte affichée comprise ; 0 en fin de séance) ; `nouvellesDeFiche(ficheId)` (nouvelles cartes à venir rattachées à cette micro-fiche, pour « Ensuite : 3 nouvelles cartes ») ; `corrigerVerdict(paquet, carteId, ancien, nouveau)` après une contestation acceptée : si la réponse n'est plus fausse, retire la reprise prévue plus loin (la carte ne revient pas) et retire sa fiche des fiches à relire si plus aucune réponse fausse de la séance ne s'y rattache ; met le bilan à jour ; renvoie true si une reprise a été retirée. Mains libres l'appelle aussi.
 - Séance à l'écran : « Terminer » pendant la correction affiche la fin tout de suite ; la réponse, corrigée ensuite, compte quand même (bilan et envoi refaits, « Continuer » inactif le temps de la correction). Un second avis qui aboutit après « Suivant » ne ramène pas en arrière : son issue est dite par un message bref.
 - Jour de bascule (décision) : `nouvellesDuJour` et `parJour` additionnent le journal de v2 et `historique.days[jour]` (nw, n, right) du même jour : les cartes nouvelles faites dans v1 ce jour-là comptent dans la limite.
-- QCM : une réponse sans case cochée se note par discordances comme les autres (règle UNESS). `etatQcm().derniere` est la dernière ligne du journal. `choisirQcm` avec un cours choisi propose ses QCM même si aucune carte du cours n'a encore été vue.
+- QCM : une réponse sans case cochée se note par discordances comme les autres (règle UNESS). `etatQcm().derniere` est la dernière ligne du journal. `choisirQcm` avec un cours choisi propose ses QCM même si aucune carte du cours n'a encore été vue. La série « Mélange » prend `choix: 'a-faire'` (un QCM acquis ne revient pas de lui-même) ; quand elle est vide, « Refaire des QCM déjà réussis » prend `choix: 'reussis'`.
 - `lignesEffectives` : la ligne contestée prend le verdict et la note de la contestation (champ `contestation: id`) ; la ligne de contestation ne compte pas à part.
 - Contestations refusées : `correction.js` ajoute un cas `a-revoir` de type `contestation` avec `issue: "refuse"` ; acceptées : ligne `contestation` dans le journal + cas `a-revoir` avec `issue: "accepte"`.
 - Énoncés à la négative dans les QCM : à l'écran, la correction dit « À cocher » / « À ne pas cocher » plutôt que « Vrai » / « Faux ».

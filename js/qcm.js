@@ -77,7 +77,9 @@ export function coursVus(donnees) {
 
 // Priorité : QCM dus (dès minuit), puis jamais faits des cours vus, puis les plus anciens ; série mélangée.
 // Avec un cours choisi, ses QCM jamais faits sont proposés même si aucune carte n'a été vue.
-export function choisirQcm(donnees, maintenant, { n, cours = null, rnd = Math.random } = {}) {
+// choix : 'tout' (défaut) ; 'a-faire' : dus et jamais faits seulement (un QCM acquis ne revient pas) ;
+// 'reussis' : QCM acquis, les plus anciens d'abord (pour les refaire à la demande).
+export function choisirQcm(donnees, maintenant, { n, cours = null, choix = 'tout', rnd = Math.random } = {}) {
   const nb = n ?? donnees.reglages?.qcmParSeance ?? QCM_PAR_SEANCE;
   const fin = finJourParis(maintenant);
   const vus = new Set(coursVus(donnees));
@@ -92,11 +94,12 @@ export function choisirQcm(donnees, maintenant, { n, cours = null, rnd = Math.ra
     const e = etatQcm(q.id, journal.get(q.id));
     if (e.due != null && e.due < fin) dus.push(q);
     else if (!e.tentatives) { if (cours || vus.has(q.cours)) jamais.push(q); }
-    else anciens.push({ q, ts: e.derniere.ts });
+    else anciens.push({ q, ts: e.derniere.ts, fini: e.etape === 'fini' });
   }
   anciens.sort((a, b) => a.ts - b.ts);
-  const serie = [...melanger(dus, rnd), ...melanger(jamais, rnd), ...anciens.map(x => x.q)].slice(0, Math.max(0, nb));
-  return melanger(serie, rnd);
+  const liste = choix === 'reussis' ? anciens.filter(x => x.fini).map(x => x.q)
+    : [...melanger(dus, rnd), ...melanger(jamais, rnd), ...(choix === 'a-faire' ? [] : anciens.map(x => x.q))];
+  return melanger(liste.slice(0, Math.max(0, nb)), rnd);
 }
 
 export function ligneQcm({ qcm, cochees, resultat, duree, maintenant, appareil = 'inconnu' }) {

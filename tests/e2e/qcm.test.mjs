@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { jourParis } from '../../js/temps.js';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, QCM, fichiersDepot, attendre } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, QCM, fichiersDepot, attendre, texte } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -25,15 +25,15 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
     await page.getByRole('heading', { name: 'QCM', exact: true }).waitFor();
     await page.getByText('Ils ne comptent pas dans tes cartes acquises', { exact: false }).waitFor();
     await page.getByText('3 questions · environ 3 min').waitFor();
-    await page.getByText(/^Barème : 0 erreur = 1 point · 1 = 0,4 · 2 = 0,1 · 3 ou plus = 0\./).waitFor();
+    await page.getByText(/^Barème\s: 0 erreur = 1 point · 1 = 0,4 · 2 = 0,1 · 3 ou plus = 0\./).waitFor();
     await verifierEcran(page, 'qcm-accueil');
 
     await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 3 QCM' }).click();
     const faits = [];
     for (let i = 1; i <= 3; i++) {
       await page.locator('.proposition').first().waitFor();
-      assert.equal(await page.locator('.seance-haut__position').textContent(), `QCM ${i} sur 3`);
-      const enonce = await page.locator('.page--qcm h1.question').textContent();
+      assert.equal(await texte(page.locator('.seance-haut__position')), `QCM ${i} sur 3`);
+      const enonce = await texte(page.locator('.page--qcm h1.question'));
       const q = QCM.find(x => x.enonce === enonce);
       assert.ok(q, `QCM inconnu : ${enonce}`);
       assert.equal(await page.locator('.proposition').count(), 5);
@@ -45,8 +45,8 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
       if (i === 1) await verifierEcran(page, 'qcm-question');
       await clic(page, 'Valider');
       await page.locator('.corr-prop').first().waitFor();
-      assert.equal(await page.locator('.page--qcm .verdict__mot').textContent(), plan.titre);
-      assert.equal(await page.locator('.page--qcm .verdict__ligne').textContent(), plan.retour);
+      assert.equal(await texte(page.locator('.page--qcm .verdict__mot')), plan.titre);
+      assert.equal(await texte(page.locator('.page--qcm .verdict__ligne')), plan.retour);
       assert.equal(await page.locator('.corr-prop').count(), 5);
       assert.equal(await page.locator('.corr-prop--ko').count(), plan.erreurs);
       for (const p of q.propositions) await page.locator('.corr-prop__expl', { hasText: p.expl }).first().waitFor();
@@ -57,7 +57,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
     assert.deepEqual([...faits].sort(), Object.keys(PLAN));
 
     await page.getByRole('heading', { name: 'Série terminée' }).waitFor();
-    assert.equal(await page.locator('.grand-compteur__chiffre').textContent(), '1,5 / 3');
+    assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '1,5 / 3');
     await page.getByText('2 QCM ratés : ils reviendront dans 2 jours.').waitFor();
     await verifierEcran(page, 'qcm-bilan');
     await attendre(() => faux.commits().length === 2, { message: 'envoi du journal des QCM' });
@@ -77,9 +77,18 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
 
     await clic(page, 'Retour');
     await page.getByRole('heading', { name: 'QCM', exact: true }).waitFor();
-    await page.locator('details.choix-cours summary').click();
+    // Plus rien de dû ni de jamais fait : pas de nouvelle série (le QCM acquis ne revient pas de lui-même).
+    await page.getByText('Tous tes QCM du moment sont faits. D\'autres arriveront avec les prochains cours.').waitFor();
+    assert.equal(await page.locator('.barre-action .btn--principal').count(), 0);
+    if (!(await page.locator('details.choix-cours').evaluate(d => d.open))) await page.locator('details.choix-cours summary').click();
     await page.locator('.cours', { hasText: 'Essai · Les formes' }).getByText('3 QCM · moy. 0,5').waitFor();
     await verifierEcran(page, 'qcm-accueil-apres');
+
+    // À la demande : refaire les QCM déjà réussis (ici, le seul acquis).
+    await clic(page, 'Refaire des QCM déjà réussis');
+    await page.locator('.proposition').first().waitFor();
+    assert.equal(await texte(page.locator('.seance-haut__position')), 'QCM 1 sur 1');
+    assert.equal(await texte(page.locator('.page--qcm h1.question')), QCM.find(q => q.id === 'ess-formes-q01').enonce);
     o.verifierConsole();
   } finally {
     await o.fermer();

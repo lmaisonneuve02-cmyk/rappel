@@ -6,8 +6,7 @@ import { estAcquise } from '../../js/fsrs.js';
 import { jourParis } from '../../js/temps.js';
 import {
   demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, carteDeQuestion, geminiSimule,
-  fichiersDepot, attendre,
-} from './harnais.mjs';
+  fichiersDepot, attendre, texte, lireDonnees } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -22,19 +21,19 @@ const REPONSES = {
 };
 const MOIS = () => jourParis(Date.now()).slice(0, 7);
 
-const question = async page => carteDeQuestion(await page.locator('.page--seance h1.question').textContent());
-const position = page => page.locator('.seance-haut__position').textContent();
+const question = async page => carteDeQuestion(await texte(page.locator('.page--seance h1.question')));
+const position = page => texte(page.locator('.seance-haut__position'));
 
-async function repondre(page, texte) {
-  await page.fill('#reponse', texte);
+async function repondre(page, reponse) {
+  await page.fill('#reponse', reponse);
   const principal = page.locator('.barre-action .btn--principal');
-  assert.equal(await principal.textContent(), 'Corriger');
+  assert.equal(await texte(principal), 'Corriger');
   await principal.click();
   await page.locator('.page--seance .verdict').waitFor();
 }
 
-const mot = page => page.locator('.page--seance .verdict__mot').textContent();
-const effet = page => page.locator('.page--seance .verdict__effet').textContent();
+const mot = page => texte(page.locator('.page--seance .verdict__mot'));
+const effet = page => texte(page.locator('.page--seance .verdict__effet'));
 const suivant = page => clic(page, 'Suivant');
 
 async function terminerSeance(page) {
@@ -119,6 +118,7 @@ async function seanceComplete(theme) {
     await clic(page, 'Je ne sais pas');
     await page.locator('.verdict--nsp').waitFor();
     assert.equal(await mot(page), 'Voici la réponse');
+    assert.equal(await texte(page.locator('.page--seance .verdict__ligne')), 'Pas grave. Revient un peu plus loin dans la séance.');
     await page.locator('.attendue', { hasText: 'Le vert.' }).waitFor();
     assert.equal(await compteur(page), 'Acquises : 2/30');
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
@@ -149,8 +149,8 @@ async function seanceComplete(theme) {
 
     // Fin : bilan et un seul commit
     await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
-    assert.equal(await page.locator('.grand-compteur__chiffre').textContent(), '5/30');
-    assert.match(await page.locator('.chiffres--doux').textContent(), /^6 réponses · 4 justes · 1 partielle · 1 fausse · \d+ min$/);
+    assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '5/30');
+    assert.match(await texte(page.locator('.chiffres--doux')), /^6 réponses · 4 justes · 1 partielle · 1 fausse · \d+ min$/);
     await page.locator('.etat-envoi', { hasText: 'Tout est enregistré.' }).waitFor();
     await page.locator('#synchro-texte', { hasText: 'Enregistré' }).waitFor();
     await verifierEcran(page, nom('fin'));
@@ -182,7 +182,7 @@ async function seanceComplete(theme) {
     assert.equal(srs['col-01'].lapses, 0);   // comme v1 : une nouvelle carte ratée n'est pas un oubli
 
     // Un seul bouton principal selon la situation, puis retour à l'écran du jour.
-    assert.equal(await page.locator('.barre-action .btn--principal').textContent(), 'Réviser en avance');
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Réviser en avance');
     await page.getByRole('button', { name: 'Faire 3 QCM' }).waitFor();
     await page.locator('.onglet[data-vue="aujourdhui"]').waitFor({ state: 'hidden' });
     await page.goBack();
@@ -213,9 +213,13 @@ test('Gemini en erreur (429) : correction sur l\'appareil, mention hors ligne', 
     await repondre(page, REPONSES[r1.id]);
     assert.equal(await mot(page), 'Juste');
     await page.locator('.badge', { hasText: 'Corrigé hors ligne' }).waitFor();
-    const note = await page.locator('.note-correcteur').textContent();
-    assert.match(note, /Je corrige sur ton appareil\.$/);
-    await page.locator('#toast', { hasText: 'Je corrige sur ton appareil.' }).waitFor();
+    // Un seul message, bref, sans « Réessaie dans 20 s », qui ne cache pas la barre « Terminer · Carte n sur N ».
+    const toast = page.locator('#toast', { hasText: "Gemini est saturé pour l'instant : correction faite sur ton appareil." });
+    await toast.waitFor();
+    assert.equal(await page.locator('.note-correcteur').count(), 0, 'pas de doublon dans le verdict');
+    assert.doesNotMatch(await texte(page.locator('#toast')), /Réessaie/);
+    const [boiteToast, barre] = [await toast.boundingBox(), await page.locator('.seance-haut').boundingBox()];
+    assert.ok(boiteToast.y >= barre.y + barre.height, `le message (haut ${boiteToast.y}) passe sous la barre de séance (bas ${barre.y + barre.height})`);
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     assert.equal(await compteur(page), 'Acquises : 1/30');
     await verifierEcran(page, 'gemini-429-verdict');
@@ -244,6 +248,7 @@ test('contestation acceptée : verdict corrigé, la carte ne revient pas, ligne 
     await repondre(page, FAUX_CONTESTE);
     assert.equal(await mot(page), 'Faux');
     assert.equal(await effet(page), 'Ne compte pas encore : réussis-la quand elle revient.');
+    assert.equal(await texte(page.locator('.page--seance .verdict__ligne')), 'Revient un peu plus loin dans la séance.');
     await clic(page, 'Je conteste');
     await page.fill('#raison', 'même sens : tous les côtés égaux');
     await verifierEcran(page, 'contestation-raison');
@@ -261,7 +266,7 @@ test('contestation acceptée : verdict corrigé, la carte ne revient pas, ligne 
     await page.locator('#reponse').waitFor();
     assert.equal(await position(page), 'Carte 2 sur 5', 'la reprise de la carte contestée a disparu');
     await terminerSeance(page);
-    assert.match(await page.locator('.chiffres--doux').textContent(), /^1 réponse · 1 juste · 0 partielle · 0 fausse · /);
+    assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste · \d+ min$/);
     await page.getByRole('button', { name: 'Continuer · 4 cartes' }).waitFor();
     await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
     await verifierEcran(page, 'contestation-fin');
@@ -293,7 +298,7 @@ test('« Voir la réponse » : il se note lui-même (Je l\'avais / En partie / N
       const c = await question(page);
       vus.push([c.id, verdict]);
       const principal = page.locator('.barre-action .btn--principal');
-      assert.equal(await principal.textContent(), 'Voir la réponse');
+      assert.equal(await texte(principal), 'Voir la réponse');
       // Entrée sur un champ vide ne dévoile pas la réponse.
       await page.locator('#reponse').press('Enter');
       await page.getByText('Écris ta réponse, ou touche « Voir la réponse ».').waitFor();
@@ -379,9 +384,69 @@ test('« Suivant » pendant le second avis : on reste sur la carte suivante, l\'
     assert.equal(await compteur(page), 'Acquises : 1/30');
     await verifierEcran(page, 'suivant-pendant-second-avis');
     await terminerSeance(page);
-    assert.match(await page.locator('.chiffres--doux').textContent(), /^1 réponse · 1 juste · 0 partielle · 0 fausse · /);
+    assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste · \d+ min$/);
     await attendre(() => (fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`] || []).some(l => l.correcteur === 'contestation'),
       { message: 'ligne de contestation envoyée' });
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
+test('PC : Entrée lance la séance ; stockage en mémoire signalé, sans promettre que tout est gardé', async () => {
+  const o = await ouvrir(navigateur, serveur.base, { pc: true });
+  const { page, faux } = o;
+  // Navigation privée stricte : pas d'IndexedDB, Rappel garde tout en mémoire.
+  await o.ctx.addInitScript(() => Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }));
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    await page.getByText("Ce navigateur ne garde rien après fermeture (navigation privée ?) : tes réponses partent dès qu'il y a du réseau.").waitFor();
+    await verifierEcran(page, 'pc-aujourdhui-memoire');
+
+    // Entrée, focus hors champ : « Commencer ».
+    await o.horsLigne(true);
+    await page.keyboard.press('Enter');
+    await page.locator('#reponse').waitFor();
+    assert.equal(await position(page), 'Carte 1 sur 5');
+    const r1 = await question(page);
+    await repondre(page, REPONSES[r1.id]);
+    assert.equal(await mot(page), 'Juste');
+    await terminerSeance(page);
+    await page.locator('#synchro-texte', { hasText: 'Hors ligne : envoi au retour du réseau' }).waitFor();
+    await page.locator('.etat-envoi', { hasText: 'Hors ligne : envoi au retour du réseau' }).waitFor();
+    assert.doesNotMatch(await texte(page.locator('#synchro-texte')), /gardé/);
+    await verifierEcran(page, 'pc-fin-memoire');
+
+    // Retour du réseau, page restée ouverte : la réponse part.
+    await o.horsLigne(false);
+    await attendre(() => faux.commits().length === 2, { message: 'envoi au retour du réseau' });
+    const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
+    assert.deepEqual(lignes.map(l => [l.carte, l.verdict]), [[r1.id, 'juste']]);
+    o.verifierConsole([/ERR_INTERNET_DISCONNECTED/]);
+  } finally {
+    await o.fermer();
+  }
+});
+
+test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui dit quoi faire', async () => {
+  const o = await ouvrir(navigateur, serveur.base, { fichiers: { ...lireDonnees(), 'rappel/progres/srs/ess-couleurs.json': '{ abîmé' } });
+  const { page, faux } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    await page.locator('.pastille', { hasText: 'Les couleurs' }).click();
+    await page.locator('.barre-action .btn--principal', { hasText: 'Commencer' }).click();
+    await clic(page, "J'ai lu, on y va");
+    await page.locator('#reponse').waitFor();
+    await clic(page, 'Je ne sais pas');
+    await page.locator('.verdict--nsp').waitFor();
+    await terminerSeance(page);
+    await page.locator('#synchro-texte', { hasText: 'abîmé' }).waitFor();
+    await clic(page, 'Retour');
+    await page.getByText('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.').waitFor();
+    await verifierEcran(page, 'fichier-abime');
+    assert.equal(faux.commits().length, 1, 'rien n\'est envoyé par-dessus le fichier abîmé');
     o.verifierConsole();
   } finally {
     await o.fermer();

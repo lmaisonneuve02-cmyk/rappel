@@ -28,7 +28,7 @@ export function creer(ctx) {
       const valeur = v1 ? j.reponses : j.acquises;
       const atteint = !v1 && j.acquises >= objectif;
       const motif = exceptions[j.jour];
-      const texte = motif && !valeur ? `jour off : ${motif}` : v1 ? (j.reponses ? `${nb(j.reponses, 'réponse')} (ancienne appli)` : '—') : (valeur ? String(valeur) : '—');
+      const texte = motif && !valeur ? `jour off : ${motif}` : v1 ? (j.reponses ? `${nb(j.reponses, 'réponse')} (ancienne appli)` : '—') : (valeur ? String(valeur) : '—');
       return h('li', { class: ['jour', v1 && 'jour--v1', atteint && 'jour--atteint'] },
         h('span', { class: 'jour__date', text: j.jour === jourParis(now) ? "auj." : dateFr(j.jour, true) }),
         h('progress', { class: ['barre', 'barre--jour', v1 && 'barre--v1', atteint && 'barre--atteinte'], max: String(max), value: String(valeur || 0), 'aria-hidden': 'true' }),
@@ -44,10 +44,10 @@ export function creer(ctx) {
           h('p', { class: 'grand-compteur__chiffre' }, `${auj.acquises}/${objectif}`, auj.acquises >= objectif ? icone('juste') : null),
           h('p', { class: 'grand-compteur__texte', text: 'cartes acquises' }),
           h('progress', { class: 'barre barre--grande', max: String(objectif), value: String(Math.min(auj.acquises, objectif)), 'aria-hidden': 'true' }),
-          h('p', { class: 'chiffres chiffres--doux', text: [nb(auj.reponses, 'réponse'), nb(auj.justes, 'juste'), nb(auj.nouvelles, 'nouvelle', 'nouvelles'), auj.qcm ? `QCM : ${virgule(auj.pointsQcm)} pt sur ${auj.qcm}` : null].filter(Boolean).join(' · ') }))),
+          h('p', { class: 'chiffres chiffres--doux', text: [nb(auj.reponses, 'réponse'), nb(auj.justes, 'juste'), nb(auj.nouvelles, 'nouvelle', 'nouvelles'), auj.qcm ? `QCM : ${virgule(auj.pointsQcm)} pt sur ${auj.qcm}` : null].filter(Boolean).join(' · ') }))),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: '14 derniers jours' }),
-        h('p', { class: 'aide', text: `Cartes acquises par jour. Repère : ${objectif}.` }),
+        h('p', { class: 'aide', text: `Cartes acquises par jour. Repère : ${objectif}.` }),
         h('ol', { class: 'jours' }, jours.map(ligneJour))),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: 'Par UE' }),
@@ -55,22 +55,22 @@ export function creer(ctx) {
           h('p', { class: 'ue__nom', text: u.nom }),
           u.cartes ? [
             h('p', { class: 'ue__ligne', text: `${u.coursEnCartes} cours sur ${u.coursTotal} en cartes · ${u.cartesVues} cartes vues sur ${u.cartes}` }),
-            u.retention7j != null || u.moyenneQcm != null ? h('p', { class: 'ue__ligne', text: [u.retention7j != null ? `Révisions réussies (7 j) : ${pourcent(u.retention7j)}` : null, u.moyenneQcm != null ? `QCM : ${virgule(u.moyenneQcm)} pt en moyenne` : null].filter(Boolean).join(' · ') }) : null,
+            u.retention7j != null || u.moyenneQcm != null ? h('p', { class: 'ue__ligne', text: [u.retention7j != null ? `Révisions réussies (7 j) : ${pourcent(u.retention7j)}` : null, u.moyenneQcm != null ? `QCM : ${virgule(u.moyenneQcm)} pt en moyenne` : null].filter(Boolean).join(' · ') }) : null,
           ] : h('p', { class: 'ue__ligne', text: `Pas encore de cartes (${nb(u.coursTotal, 'cours', 'cours')} au programme)` }))))
           : h('p', { class: 'aide', text: 'Pas encore de données.' }),
-        ues.some(u => u.retention7j != null) ? h('p', { class: 'aide', text: 'Révisions réussies : part des cartes déjà vues réussies (juste ou partiel) sur la semaine.' }) : null),
+        ues.some(u => u.retention7j != null) ? h('p', { class: 'aide', text: 'Révisions réussies : part des cartes déjà vues réussies (juste ou partiel) sur la semaine.' }) : null),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: 'Correction' }),
-        h('p', { text: s0 ? `Semaine ${s0.semaine.slice(-2)} : ${nb(s0.contestations, 'contestation')}, dont ${nb(s0.acceptees, 'acceptée')}, sur ${nb(s0.reponses, 'réponse')}.` : 'Aucune contestation pour le moment.' })),
+        h('p', { text: s0 ? `Semaine ${s0.semaine.slice(-2)} : ${nb(s0.contestations, 'contestation')}, dont ${nb(s0.acceptees, 'acceptée')}, sur ${nb(s0.reponses, 'réponse')}.` : 'Aucune contestation pour le moment.' })),
       h('details', { class: 'details details--aide' },
         h('summary', null, 'Comment ça marche'),
         h('ol', { class: 'liste-simple' },
-          h('li', { text: 'Tu cherches la réponse avant de la voir : c\'est cet effort qui fait retenir.' }),
-          h('li', { text: 'Une carte réussie revient de plus en plus tard ; ratée, elle revient dans 10 min.' }),
-          h('li', { text: 'Gemini juge le sens, pas l\'orthographe ; sans clé ou hors ligne, ton appareil corrige. Pas d\'accord ? « Je conteste ».' }),
-          h('li', { text: `Une carte est acquise quand ta dernière réponse du jour est juste ou partielle ; objectif : ${objectif} par jour.` }),
+          h('li', { text: 'Tu cherches la réponse avant de la voir : c\'est cet effort qui fait retenir.' }),
+          h('li', { text: 'Une carte réussie revient de plus en plus tard ; ratée, elle revient un peu plus loin dans la séance.' }),
+          h('li', { text: 'Gemini juge le sens, pas l\'orthographe ; sans clé ou hors ligne, ton appareil corrige. Pas d\'accord ? « Je conteste ».' }),
+          h('li', { text: `Une carte est acquise quand ta dernière réponse du jour est juste ou partielle ; objectif : ${objectif} par jour.` }),
           h('li', { text: 'En mains libres, je lis les questions et tu réponds à voix haute.' }),
-          h('li', { text: 'Tes réponses sont gardées sur l\'appareil puis envoyées dans ton dépôt : tes autres appareils les retrouvent.' }))));
+          h('li', { text: 'Tes réponses sont gardées sur l\'appareil puis envoyées dans ton dépôt : tes autres appareils les retrouvent.' }))));
   }
 
   afficher(true);

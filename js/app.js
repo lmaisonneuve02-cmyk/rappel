@@ -145,11 +145,11 @@ async function demarrer() {
     const objectif = ctx.objectif();
     const n = sansJeton ? 0 : ctx.acquises();
     const atteint = n >= objectif;
-    compteurTexte.textContent = `Acquises : ${n}/${objectif}${atteint ? ' ✓' : ''}`;
+    compteurTexte.textContent = `Acquises : ${n}/${objectif}${atteint ? ' ✓' : ''}`;
     compteurBarre.max = objectif;
     compteurBarre.value = Math.min(n, objectif);
     compteur.classList.toggle('compteur--atteint', atteint);
-    compteur.setAttribute('aria-label', `${n} carte${n > 1 ? 's' : ''} acquise${n > 1 ? 's' : ''} sur ${objectif} aujourd'hui. Comment on compte ?`);
+    compteur.setAttribute('aria-label', `${n} carte${n > 1 ? 's' : ''} acquise${n > 1 ? 's' : ''} sur ${objectif} aujourd'hui. Comment on compte ?`);
     if (dernierCompte != null && n > dernierCompte) {
       compteur.classList.remove('monte');
       void compteur.offsetWidth;
@@ -158,23 +158,34 @@ async function demarrer() {
     dernierCompte = n;
   }
 
+  // Stockage en mémoire (navigation privée, IndexedDB indisponible) : rien ne survit à la fermeture,
+  // l'état d'envoi ne promet donc pas que tout est gardé sur l'appareil.
+  function messageEtat(etat = sync.etat) {
+    const m = etat.message || '';
+    if (!stockage.enMemoire) return m;
+    if (etat.mode === 'hors-ligne' && /gardé/.test(m)) return 'Hors ligne : envoi au retour du réseau';
+    return m.replace(/\s*Tes réponses restent gardées sur l'appareil\./, '');
+  }
+  ctx.messageEtat = messageEtat;
+
   function majSynchro(etat = sync.etat) {
     const zone = $('etat-synchro');
-    $('synchro-texte').textContent = etat.message || '';
+    const message = messageEtat(etat);
+    $('synchro-texte').textContent = message;
     zone.dataset.mode = etat.mode;
-    zone.title = etat.message || '';
-    zone.setAttribute('aria-label', `${etat.message || ''}. Voir le détail.`);
+    zone.title = message;
+    zone.setAttribute('aria-label', `${message}. Voir le détail.`);
   }
 
   compteur.addEventListener('click', () => {
     const objectif = ctx.objectif();
     const n = ctx.acquises();
     ouvrirFeuille({
-      titre: `Acquises aujourd'hui : ${n} sur ${objectif}`, surtitre: 'Comment on compte', classe: 'feuille--courte', libelleFermer: 'Compris',
+      titre: `Acquises aujourd'hui : ${n} sur ${objectif}`, surtitre: 'Comment on compte', classe: 'feuille--courte', libelleFermer: 'Compris',
       contenu: h('ul', { class: 'liste-simple' },
         h('li', { text: 'Une carte est acquise quand ta dernière réponse du jour est juste ou partielle.' }),
-        h('li', { text: 'Ratée puis réussie plus tard : elle compte.' }),
-        h('li', { text: 'Réussie puis ratée : elle ne compte plus, jusqu\'à ce que tu la réussisses.' }),
+        h('li', { text: 'Ratée puis réussie plus tard : elle compte.' }),
+        h('li', { text: 'Réussie puis ratée : elle ne compte plus, jusqu\'à ce que tu la réussisses.' }),
         h('li', { text: 'Les QCM ne comptent pas.' }),
         h('li', { text: 'Le compte repart à zéro à minuit.' })),
     });
@@ -189,7 +200,7 @@ async function demarrer() {
     const maj = () => {
       const s = sync.etat;
       const derniere = reglages.texteDernierEchange(s.derniereSynchro, Date.now());
-      vider(detail, h('strong', { text: s.message || '' }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
+      vider(detail, h('strong', { text: messageEtat(s) }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
       detail.dataset.mode = s.mode;
       envoyer.hidden = !s.attente || s.mode === 'sans-jeton';
       if (s.mode === 'envoi') envoyer.disabled = true;
@@ -199,7 +210,8 @@ async function demarrer() {
     sync.addEventListener('etat', suivre);
     ouvrirFeuille({
       titre: 'Enregistrement de tes réponses', classe: 'feuille--courte', actions: sync.etat.attente && sync.etat.mode !== 'sans-jeton' ? envoyer : null,
-      contenu: [detail, h('p', { class: 'aide', text: 'Tout est gardé sur l\'appareil, puis envoyé dans ton dépôt. Le détail est dans Réglages, après la séance.' })],
+      contenu: [detail, h('p', { class: 'aide', text: stockage.enMemoire ? 'Tes réponses partent dans ton dépôt dès qu\'il y a du réseau. Le détail est dans Réglages, après la séance.'
+        : 'Tout est gardé sur l\'appareil, puis envoyé dans ton dépôt. Le détail est dans Réglages, après la séance.' })],
     });
   }
   $('etat-synchro').addEventListener('click', () => {
@@ -263,7 +275,7 @@ async function demarrer() {
     dernierCompte = null;
     majEntete();
     if (nomCourant === 'aujourdhui' || nomCourant === 'suivi') vueCourante?.surDonnees?.(sync.donnees());
-    toast('Nouvelle journée : compteur remis à zéro.');
+    toast('Nouvelle journée : compteur remis à zéro.');
   }, 60000);
 
   // Premier écran : sans jeton, les premiers pas.

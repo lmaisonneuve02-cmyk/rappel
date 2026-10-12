@@ -1,0 +1,120 @@
+/* =====================================================================
+   Identité visuelle des micro-fiches — extrait VERBATIM
+   Sources (lues le 12/10/2026, CSS identique octet pour octet sur les trois) :
+     - (page claude.ai)  Micro-fiches cardio-vasculaires (v. 1791490256-6b3d)
+     - (page claude.ai)  Micro-fiches de sémiologie     (v. 1791741681-aea3)
+     - (page claude.ai)  Micro-fiches respiratoires     (v. 1791801226-ca8c)
+
+   Polices (à mettre dans <head>, verbatim) :
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@500&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+     -> Atkinson Hyperlegible 400, 400 italique, 700 ; IBM Plex Mono 500 ;
+        Newsreader axe optique 6..72, graisses 500 et 600 (pas d'italique).
+
+   Couleurs nommées (commentaire d'origine, gardé ci-dessous) :
+     --art  = « rouge artériel » : repères (eyebrow, titres de pin, chiffres, sigles du sommaire)
+     --vein = « bleu veineux »   : liens, focus, survol
+     --grid = trait du papier d'ECG (quadrillage 8 px du bandeau .hero)
+
+   NB : la plateforme claude.ai injecte avant ce bloc un squelette qui ne fait PAS
+   partie de l'identité (body 14px -apple-system, fond #fff…) ; la règle `body`
+   ci-dessous le remplace. Pour une page hors claude.ai, ajouter seulement :
+     *, *::before, *::after { box-sizing: border-box; }  body { margin: 0; }
+   ===================================================================== */
+
+/* ---------- 1. CSS VERBATIM des pages de micro-fiches ---------- */
+
+/* Une colonne de lecture sur papier d'ECG : rouge artériel pour les repères, bleu veineux pour les liens. */
+:root {
+  --bg: #fbf8f7; --surface: #ffffff; --ink: #24191c; --muted: #6d5d61; --rule: #eadcde; --grid: #f4e1e3;
+  --art: #a3263a; --vein: #2c5a86;
+  --f-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #151012; --surface: #1c1518; --ink: #f2e9ea; --muted: #b4a4a8; --rule: #3a2b30; --grid: #281b1f; --art: #f07c8e; --vein: #93b9e4; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #151012; --surface: #1c1518; --ink: #f2e9ea; --muted: #b4a4a8; --rule: #3a2b30; --grid: #281b1f; --art: #f07c8e; --vein: #93b9e4; color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-body); }
+.wrap { max-width: 46rem; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 8px; }
+.hero { background-color: var(--surface); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 8px 8px; border: 1px solid var(--rule); border-radius: 10px; padding: 20px; display: grid; gap: 10px; }
+.hero .eyebrow { margin: 0; }
+h1 { font-family: var(--f-display); font-weight: 600; font-size: clamp(1.75rem, 1.2rem + 2.4vw, 2.4rem); line-height: 1.1; margin: 0; text-wrap: balance; }
+.hero p.use { margin: 0; color: var(--muted); max-width: 60ch; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--art); margin: 0; }
+.toc { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { display: inline-flex; gap: 8px; align-items: baseline; padding: 6px 10px; border: 1px solid var(--rule); border-radius: 999px; background: var(--bg); color: var(--vein); text-decoration: none; font-size: 0.92rem; }
+.toc a:hover { border-color: var(--vein); }
+.toc .cm { font-family: var(--f-mono); font-size: 0.75rem; color: var(--art); }
+a:focus-visible { outline: 2px solid var(--vein); outline-offset: 2px; }
+.fiche { border-top: 1px solid var(--rule); padding-block: 26px 6px; display: grid; gap: 14px; min-width: 0; }
+.fiche header { display: grid; gap: 4px; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.55rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+.why { margin: 0; color: var(--muted); font-style: italic; }
+.pin { display: grid; grid-template-columns: 8.5rem 1fr; gap: 4px 16px; min-width: 0; }
+.pin h3 { margin: 0; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--art); padding-top: 3px; }
+.pin ul { margin: 0; padding-left: 1.1em; display: grid; gap: 5px; min-width: 0; }
+.pin li::marker { color: var(--muted); }
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 34rem; font-size: 0.94rem; }
+th { text-align: left; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+td { padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 700; }
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px; }
+.num { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.num b { font-family: var(--f-mono); font-weight: 500; font-size: 1.15rem; color: var(--art); font-variant-numeric: tabular-nums; }
+.num span { font-size: 0.86rem; color: var(--muted); }
+footer { border-top: 1px solid var(--rule); padding-top: 18px; margin-top: 18px; color: var(--muted); font-size: 0.9rem; display: grid; gap: 6px; }
+footer a { color: var(--vein); }
+@media (max-width: 34rem) { .pin { grid-template-columns: 1fr; } }
+
+/* ---------- fin du CSS verbatim ---------- */
+
+
+/* =====================================================================
+   2. CE QUE LES PAGES NE COUVRENT PAS (à décider pour Rappel 2)
+   - Bloc `p` : rendu en <p> nu, sans classe, directement dans <section class="fiche">
+     (vu dans la fiche digestive). Aucune règle dédiée : il hérite de body (16px/1.55)
+     et garde la marge navigateur (1em), qui s'ajoute au `gap: 14px` de la grille
+     (pas de fusion des marges dans une grille). Proposition : .fiche > p { margin: 0; }
+   - Bloc `h` (fiches bruits, tonus) et classes de cellule `s: "key" | "ok"`
+     (fiches de sémio cardio/neuro) : JAMAIS rendus sur ces pages, donc aucun style
+     source. Proposition cohérente (NON verbatim) :
+       .fiche h3.sub { font-family: var(--f-display); font-weight: 600; font-size: 1.2rem; line-height: 1.2; margin: 6px 0 0; }
+       td.key { color: var(--art); font-weight: 700; }
+       td.ok  { color: var(--vein); font-weight: 700; }   (pas de vert dans la palette)
+   - Pas d'échelle typographique déclarée : tailles réelles =
+       body 16px/1.55 ; h1 clamp(1.75rem, 1.2rem + 2.4vw, 2.4rem)/1.1 Newsreader 600 ;
+       h2 1.55rem/1.15 Newsreader 600 ; num b 1.15rem Plex Mono 500 ;
+       table 0.94rem ; footer 0.9rem ; toc a 0.92rem ; num span 0.86rem ;
+       pin h3 0.8rem (+0.06em, capitales, Atkinson 700 par défaut h3) ;
+       eyebrow 0.78rem (+0.08em, capitales, Plex Mono) ; th 0.75rem (+0.06em) ; toc .cm 0.75rem.
+     Rayons : 10px (hero), 8px (scroll, num), 999px (pastilles du sommaire).
+   ===================================================================== */
+
+
+/* =====================================================================
+   3. POUR COMPARAISON SEULEMENT : l'ancienne identité de Rappel v1
+   ((page claude.ai) = rappel/v1/index.html, identique).
+   Autre palette (bleu-gris, --red #C2342B), polices Spectral + Inter,
+   papier ligné (repeating-linear-gradient 30px/31px) au lieu du papier d'ECG.
+   Ce n'est PAS l'identité visée par docs/rappel2.md. Rendu des fiches en surimpression :
+
+   .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet)}
+   .scroll table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:540px}
+   .scroll th,.scroll td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--rule)}
+   .scroll th{font-weight:600;font-size:12.5px;color:var(--ink-2)}
+   .scroll tr:last-child td{border-bottom:0}
+   .scroll td:first-child{font-weight:500;border-right:1px solid var(--rule)}
+   .key{color:var(--red);font-weight:600}.ok{color:var(--green);font-weight:600}
+   .pin{border-left:3px solid var(--red);background:var(--red-bg);padding:10px 14px;border-radius:0 var(--r) var(--r) 0;font-size:14px}
+   .pin b{display:block;color:var(--red);font-size:12.5px;margin-bottom:4px}
+   .pin p{margin:4px 0 0}
+   .nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+   .nums div{background:var(--sheet);padding:9px 11px;font-size:13.5px}
+   .nums b{font-variant-numeric:tabular-nums}
+   .nums span{display:block;color:var(--ink-2);font-size:12px}
+   ===================================================================== */

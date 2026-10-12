@@ -31,7 +31,7 @@ const fiche = id => ({ id, title: 'Souffles du cœur', why: 'Pour ne plus confon
 const carteVg = {
   id: 'p1-01', type: 'fait', q: 'Quel ventricule s\'hypertrophie dans le rétrécissement aortique ?', a: 'Le ventricule gauche.', fiche: 'f-ok',
   bareme: { idees: [{ id: 'k1', texte: 'ventricule gauche', formulations: ['VG', 'cavité ventriculaire gauche'], obligatoire: true }],
-    pieges: [{ si: 'droit', pourquoi: 'Le ventricule droit lutte contre la pression pulmonaire, pas aortique.' }] },
+    pieges: [{ si: 'droit', sauf: '', pourquoi: 'Le ventricule droit lutte contre la pression pulmonaire, pas aortique.' }] },
 };
 const carteTrou = {
   id: 'p1-02', type: 'cloze', q: 'Le souffle du rétrécissement aortique est {{systolique}}.', fiche: 'f-ok',

@@ -73,8 +73,12 @@ function analyze(text,abrExtra){
   for(let i=0;i+1<raw.length;i++){const a=raw[i],b=raw[i+1];if(/\d/.test(a+b)||a.length<2||b.length<2||STOP.has(a)||STOP.has(b))continue;const j=stem(a+b);set.add(j);pairs.push([canon(a),canon(b),j])}
   return {stems,set,nums,words,pairs,arr:[...new Set(stems)]};
 }
-function lev(a,b,max){if(Math.abs(a.length-b.length)>max)return max+1;let v=[...Array(b.length+1).keys()];
-  for(let i=1;i<=a.length;i++){let prev=v[0];v[0]=i;let best=i;for(let j=1;j<=b.length;j++){const t=v[j];v[j]=Math.min(v[j]+1,v[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=t;if(v[j]<best)best=v[j]}if(best>max)return max+1}return v[b.length]}
+// Distance de Damerau-Levenshtein restreinte : l'inversion de deux lettres voisines compte
+// pour une faute (« infractus »). Arrêt anticipé dès que toute une ligne dépasse max.
+function lev(a,b,max){if(Math.abs(a.length-b.length)>max)return max+1;let pp=null,p=[...Array(b.length+1).keys()];
+  for(let i=1;i<=a.length;i++){const c=[i];let best=i;for(let j=1;j<=b.length;j++){let d=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));
+    if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])d=Math.min(d,pp[j-2]+1);c[j]=d;if(d<best)best=d}
+    if(best>max)return max+1;pp=p;p=c}return p[b.length]}
 function hasStem(A,s){
   if(A.set.has(s))return true;if(s.length<5)return false;const opp=ANTS.get(s);
   for(const t of A.arr){

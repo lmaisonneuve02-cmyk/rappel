@@ -63,14 +63,16 @@ function espacer(file, cle) {
   return file;
 }
 
-// Nombre de cartes distinctes vues pour la première fois aujourd'hui (une contestation ne change rien).
+// Nombre de cartes distinctes vues pour la première fois aujourd'hui (une contestation ne change rien),
+// plus les nouvelles faites dans v1 ce jour-là (historique, jour de bascule).
 export function nouvellesDuJour(donnees, maintenant) {
   const debut = debutJourParis(maintenant), fin = finJourParis(maintenant);
   const cartes = new Set();
   for (const l of donnees.reponses || []) {
     if (l.nouvelle === true && !estContestation(l) && l.ts >= debut && l.ts < fin) cartes.add(l.carte);
   }
-  return cartes.size;
+  const v1 = Number(donnees.historique?.days?.[jourParis(maintenant)]?.nw);
+  return cartes.size + (Number.isFinite(v1) && v1 > 0 ? v1 : 0);
 }
 
 // Règle de déblocage : cartes dont la dernière réponse d'aujourd'hui est juste ou partielle.

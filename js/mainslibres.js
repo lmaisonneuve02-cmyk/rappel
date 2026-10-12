@@ -42,6 +42,7 @@ const MESSAGES = {
   fiche: 'Nouvelle fiche : lis-la à l\'écran.',
   ficheEcoute: 'Lis la fiche, puis dis « suivant ».',
   geste: 'Touche le bouton pour que je t\'écoute.',
+  boutonGeste: 'Toucher pour répondre',
   pause: 'En pause. Touche « Reprendre » pour continuer.',
   pauseSilence: 'Je n\'entendais rien, alors j\'ai mis en pause. Touche « Reprendre » pour continuer.',
   pauseFiche: 'Prends le temps de lire la fiche. Touche « Reprendre » quand tu as fini.',
@@ -271,7 +272,14 @@ export class MainsLibres extends EventTarget {
     this._verifier(gen);
   }
 
-  // Écoute après la fin de la voix. facultatif : une erreur ou un refus donne simplement « rien entendu ».
+  // Erreur du micro, sauf « rien entendu » (traité comme une réponse vide).
+  _erreurMicro() {
+    const err = this.ecoute.erreur;
+    return err && err.code !== 'no-speech' ? err : null;
+  }
+
+  // Écoute après la fin de la voix (délai : la fin de la synthèse ne doit pas être captée).
+  // facultatif : une erreur ou un refus donne simplement « rien entendu ».
   async _ecouter({ attente, facultatif = false } = {}) {
     const gen = this._gen;
     await this._attendre(this.delaiMicro);
@@ -279,17 +287,17 @@ export class MainsLibres extends EventTarget {
     const options = attente ? { attente } : undefined;
     let texte = await this.ecoute.demarrer(options);
     this._verifier(gen);
-    let err = this.ecoute.erreur;
+    let err = this._erreurMicro();
     if (err && CODES_GESTE.has(err.code)) {
       if (facultatif) return '';
       // iOS refuse parfois d'ouvrir le micro sans geste : on demande un toucher.
       const detail = this._dernier;
       texte = await new Promise(resoudre => {
         this._attenteGeste = { resoudre, options, detail };
-        this._emettre('attente-geste', { texte: detail?.texte ?? '', message: MESSAGES.geste, micro: false });
+        this._emettre('attente-geste', { texte: detail?.texte ?? '', message: MESSAGES.geste, bouton: MESSAGES.boutonGeste, micro: false, code: err.code });
       });
       this._verifier(gen);
-      err = this.ecoute.erreur;
+      err = this._erreurMicro();
     }
     if (err) {
       if (facultatif) return '';

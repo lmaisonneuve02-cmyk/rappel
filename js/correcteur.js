@@ -96,9 +96,15 @@ function ideesDeduites(carte, avecQuestion = true) {
 
 // --- Mesure d'une phrase dans la réponse (gradeLocal de v1) --------------------------------
 
+// Unités : facultatives dans une phrase qui contient un nombre (« 140 » vaut « 140 mmHg »).
+const UNITES = ['mmhg', 'mm', 'cm', 'm', 'ml', 'l', 'mg', 'g', 'kg', 's', 'ms', 'min', 'h', 'j', 'jours', 'ans',
+  'pourcent', 'bpm', 'cmh2o', 'kpa', 'mmol', 'meq', 'ui'];
+const RE_UNITES = new RegExp(`(?<!\\p{L})(?:${UNITES.join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+
 // Racines de la phrase hors mots de la question (toutes si elle n'a que des mots de la question).
 function analyserPhrase(texte, Q, abreviations) {
-  const an = analyze(texte, abreviations);
+  const brut = analyze(texte, abreviations);
+  const an = brut.nums.size ? analyze(texte.replace(RE_UNITES, ' '), abreviations) : brut;
   let racines = an.arr;
   if (Q) {
     const gardees = racines.filter(s => !Q.set.has(s));
@@ -287,7 +293,9 @@ export function verifierBareme(carte) {
     if (!estObjet(p)) { m.push(`barème, ${nom} : doit être un objet {si, sauf, pourquoi}`); return; }
     const siOk = typeof p.si === 'string' && !!norm(p.si);
     if (!siOk) m.push(`barème, ${nom} : « si » manquant`);
-    if (p.sauf != null && (typeof p.sauf !== 'string' || !norm(p.sauf))) m.push(`barème, ${nom} : « sauf » doit être un texte non vide`);
+    // « sauf » vide = pas d'exception.
+    if (p.sauf != null && typeof p.sauf !== 'string') m.push(`barème, ${nom} : « sauf » doit être un texte (vide s'il n'y a pas d'exception)`);
+    else if (typeof p.sauf === 'string' && p.sauf.trim() && !norm(p.sauf)) m.push(`barème, ${nom} : « sauf » ne contient aucun mot`);
     if (!texteDe(p.pourquoi)) m.push(`barème, ${nom} : « pourquoi » manquant (c'est le message montré en cas d'erreur)`);
     if (!siOk) return;
     // Un piège ne doit pas refuser la réponse attendue ni une formulation correcte.

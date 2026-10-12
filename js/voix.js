@@ -15,6 +15,7 @@ export function reconnaissanceDisponible(win = globalThis) {
 // ---------- Messages d'erreur du micro (le problème et ce qu'il faut faire) ----------
 
 export const MESSAGES_ECOUTE = {
+  'no-speech': "Je n'ai rien entendu. Parle un peu plus fort, ou rapproche-toi du micro.",
   'not-allowed': "Le micro est bloqué pour ce site. Autorise-le dans les réglages du navigateur (icône à gauche de l'adresse). Sur iPhone, active aussi Siri et Dictée.",
   'service-not-allowed': "La reconnaissance vocale n'est pas disponible ici. Sur iPhone : active Dictée (Réglages › Général › Clavier) et Siri, ou ouvre Rappel dans Safari plutôt que depuis l'écran d'accueil.",
   'audio-capture': "Aucun micro trouvé. Vérifie qu'il est branché et qu'aucune autre appli ne l'utilise.",
@@ -39,13 +40,12 @@ export function fusionner(base, ajout) {
   if (!a) return b;
   const na = normaliser(a), nb = normaliser(b);
   if (!nb) return a;
+  if (!na) return b;
   if (na === nb || na.endsWith(' ' + nb)) return a;   // doublon
+  // Segment cumulé : il commence par le texte déjà acquis (le dernier mot peut avoir été complété).
   const ma = na.split(' '), mb = nb.split(' ');
-  if (mb.length >= ma.length) {
-    let pareils = 0;
-    for (let i = 0; i < ma.length; i++) if (ma[i] === mb[i]) pareils++;
-    if (pareils >= Math.ceil(ma.length * 0.6)) return b;   // segment cumulé : il contient déjà le début
-  }
+  const k = ma.length - 1;
+  if (mb.length >= ma.length && ma.slice(0, k).every((m, i) => m === mb[i]) && mb[k].startsWith(ma[k])) return b;
   return a + ' ' + b;
 }
 
@@ -53,7 +53,7 @@ export function fusionner(base, ajout) {
 
 // Événements : 'partiel' (detail : texte en cours), 'fin' (detail : texte final),
 // 'erreur' (detail : {code, message}). demarrer() résout toujours avec le texte (vide si rien ou erreur) ;
-// après une erreur, ecoute.erreur vaut {code, message}.
+// après une erreur, ecoute.erreur vaut {code, message}. Rien entendu avant la fin de l'attente : erreur 'no-speech'.
 export class Ecoute extends EventTarget {
   constructor({ lang = 'fr-FR', silence = 2500, attente = 8000, Reco, horloge = HORLOGE } = {}) {
     super();
@@ -144,10 +144,9 @@ export class Ecoute extends EventTarget {
   }
 
   _erreurReco(s, reco, e) {
-    if (s !== this._s || reco !== s.reco) return;
+    if (s !== this._s || reco !== s.reco || s.fin) return;   // après un arrêt demandé : onend conclut
     const code = e?.error || 'inconnue';
     if (code === 'no-speech') return;           // rien entendu : le cycle se relance, la minuterie décide
-    if (code === 'aborted' && s.fin) return;    // arrêt demandé par nous
     this._echouer(s, code);
   }
 
@@ -155,14 +154,17 @@ export class Ecoute extends EventTarget {
     if (s !== this._s || reco !== s.reco) return;
     s.acquis = this._texte(s);
     s.final = s.provisoire = '';
-    if (s.fin || ++s.relances > 60) return this._conclure(s);
+    if (s.fin) return this._conclure(s);
+    if (++s.relances > 60) return this._conclure(s, this._texte(s) ? undefined : 'no-speech');
     this._lancer(s);
   }
 
   _armer(s, ms) {
     this.horloge.clearTimeout(s.minuterie);
     s.minuterie = this.horloge.setTimeout(() => {
-      if (s === this._s && !s.fin) this._couper(s, !this._texte(s));
+      if (s !== this._s || s.fin) return;
+      if (this._texte(s)) this._couper(s, false);
+      else this._echouer(s, 'no-speech');
     }, ms);
   }
 
@@ -314,13 +316,17 @@ export class Parole {
   }
 
   // Lit le texte et résout à la fin (ou dès arreter()). Ne rejette jamais.
+  // Toute lecture en cours est coupée d'abord (cancel() débloque aussi la file de Chrome).
   async dire(texte) {
     const jeton = ++this._jeton;
     if (!this.disponible) return;
     const max = Math.max(60, Math.round(160 * Math.min(1, this.vitesse || 1)));
     const phrases = decouperPhrases(texte, max);
+    try { this.synth.cancel(); } catch { /* rien */ }
+    const avant = this._fin;
+    this._fin = null;
+    avant?.();
     if (!phrases.length) return;
-    try { if (this.synth.speaking || this.synth.pending) this.synth.cancel(); } catch { /* rien */ }
     const voix = choisirVoix(this._voix(), this.voixNom);
     for (const phrase of phrases) {
       if (jeton !== this._jeton) return;

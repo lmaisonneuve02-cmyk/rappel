@@ -91,6 +91,22 @@ test('nouvellesDuJour : une contestation ne change pas le compte', () => {
   assert.equal(nouvellesDuJour(donneesDe({ reponses: [seule] }), T), 0);
 });
 
+test('nouvellesDuJour : jour de bascule, les nouvelles de v1 (historique) comptent', () => {
+  const d = donneesDe({ reponses: [ligne('c1', T), ligne('c2', T + MIN)] });
+  d.historique = { source: 'v1', days: { '2026-10-12': { n: 30, judged: 30, right: 20, nw: 12 }, '2026-10-11': { nw: 40 } } };
+  assert.equal(nouvellesDuJour(d, T), 14);
+  assert.equal(nouvellesDuJour({ historique: d.historique }, T), 12);
+  d.historique.days['2026-10-12'].nw = 'x';
+  assert.equal(nouvellesDuJour(d, T), 2);
+  // la limite de nouvelles cartes en tient compte
+  const p = paquet('p1', Array.from({ length: 20 }, (_, i) => carte(`n${i}`)));
+  const d2 = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 15 } });
+  d2.historique = { days: { '2026-10-12': { nw: 10 } } };
+  assert.equal(nouvellesPossibles(d2, T, 'tout').length, 5);
+  d2.historique.days['2026-10-12'].nw = 20;
+  assert.equal(nouvellesPossibles(d2, T, 'tout').length, 0);
+});
+
 test('acquisesDuJour : dernière réponse du jour juste ou partielle, tous paquets', () => {
   const d = donneesDe({
     srs: {

@@ -7,6 +7,7 @@ import { acquisesDuJour, nouvellesDuJour } from './seance.js';
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 const reussie = l => l.verdict === 'juste' || l.verdict === 'partiel';
 const arrondi = (x, k = 1000) => Math.round(x * k) / k;
+const entier = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
 
 // jourParis mémorisé par heure : à Paris, minuit tombe toujours sur une heure pile en UTC.
 function memoJour() {
@@ -91,16 +92,17 @@ export function parJour(donnees, maintenant, n = 14) {
     if (duJour.length) {
       entree.reponses = duJour.length;
       entree.justes = duJour.filter(l => l.verdict === 'juste').length;
-      entree.nouvelles = nouvellesDuJour(donnees, t);
       entree.acquises = acquisesDesLignes(duJour);
     } else if (histo[jour]) {
-      // Jour de Rappel v1 : pas de détail par carte, donc pas d'acquises.
-      const h = histo[jour];
-      entree.reponses = h.n ?? 0;
-      entree.justes = h.right ?? 0;
-      entree.nouvelles = h.nw ?? 0;
-      entree.acquises = null;
+      entree.acquises = null;   // jour de Rappel v1 seul : pas de détail par carte
     }
+    // Jour de bascule : v1 (historique) et v2 (journal) s'additionnent.
+    const h = histo[jour];
+    if (h) {
+      entree.reponses += entier(h.n);
+      entree.justes += entier(h.right);
+    }
+    entree.nouvelles = nouvellesDuJour(donnees, t);   // journal + historique (nw)
     if (k === 0) entree.acquises = acquisesDuJour(donnees, maintenant);
     res.push(entree);
     t = debut - 1;   // un instant de la veille

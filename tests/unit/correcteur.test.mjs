@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ideesDe, correspondanceDirecte, corrigerLocal, verifierBareme } from '../../js/correcteur.js';
-import { refText, creerIdf } from '../../js/texte.js';
+import { refText, creerIdf, lev } from '../../js/texte.js';
 
 const C = {
   vg: {
@@ -179,6 +179,37 @@ test('nombres exacts', () => {
   assert.match(trou.erreurs[0], /attend 2, tu as écrit 3/);
 });
 
+test('unités facultatives à côté d\'un nombre : « 140 » vaut « 140 mmHg »', () => {
+  assert.equal(corr('seuil', '140').verdict, 'juste');
+  assert.equal(corr('seuil', '140mmHg').verdict, 'juste');
+  assert.equal(corr('seuil', '140 cmH2O').verdict, 'juste');
+  assert.equal(corr('seuil', '130').verdict, 'faux');
+  const debit = { id: 'x-debit', type: 'fait', q: 'Débit cardiaque normal au repos ?', a: '5 L/min.',
+    bareme: { idees: [
+      { id: 'k1', texte: '5 L/min', formulations: ['5 litres par minute', '5000 mL/min'], obligatoire: true },
+      { id: 'k2', texte: 'FC 70 bpm', formulations: ['fréquence 70 bpm', '70 battements par minute'], obligatoire: true },
+    ] } };
+  assert.equal(corrigerLocal(debit, '5, avec une FC à 70', { idf }).verdict, 'juste');
+  assert.equal(corrigerLocal(debit, '5 l et fc 70', { idf }).verdict, 'juste');
+  // sans nombre dans la phrase, le mot reste exigé (« MS » = membre supérieur)
+  const ms = { id: 'x-ms', type: 'fait', q: 'Quel membre est touché ?', a: 'MS.' };
+  assert.equal(corrigerLocal(ms, 'le membre supérieur', { idf }).verdict, 'juste');
+  assert.equal(corrigerLocal(ms, 'aucun', { idf }).verdict, 'faux');
+});
+
+test('inversion de deux lettres voisines : une seule faute (« infractus »)', () => {
+  assert.equal(lev('infarctu', 'infractu', 1), 1);
+  assert.equal(lev('infarctu', 'infractu', 2), 1);
+  assert.equal(lev('ab', 'ba', 1), 1);
+  assert.equal(lev('abc', 'abc', 0), 0);
+  assert.equal(lev('kitten', 'sitting', 3), 3);
+  assert.equal(lev('abcdef', 'badcfe', 1), 2);   // arrêt anticipé : max + 1
+  assert.equal(lev('abc', 'abcdef', 1), 2);
+  assert.equal(lev('ca', 'abc', 3), 3);           // version restreinte : pas de modification après inversion
+  assert.equal(corr('idm', 'un infractus du myocarde').verdict, 'juste');
+  assert.equal(corr('idm', 'infarctus du myocrade').verdict, 'juste');
+});
+
 test('texte à trous : un trou = une idée obligatoire', () => {
   assert.deepEqual(ideesDe(C.souffle).map(i => [i.id, i.texte, i.obligatoire]), [
     ['t1', 'systolique', true], ['t2', '2e espace intercostal droit', true],
@@ -276,6 +307,17 @@ test('verifierBareme : pièges bien formés et compatibles avec la réponse atte
   assert.match(m, /piège « vague » : se déclenche sur/);
   assert.match(m, /piège 4 : doit être un objet/);
   assert.doesNotMatch(m, /piège 1/);
+});
+
+test('piège avec « sauf » vide : pas d\'exception, barème valide', () => {
+  const carte = structuredClone(C.vg);
+  carte.bareme.pieges = [{ si: 'droit', sauf: '', pourquoi: 'Le ventricule droit lutte contre la pression pulmonaire.' }];
+  assert.deepEqual(verifierBareme(carte), []);
+  assert.deepEqual(corrigerLocal(carte, 'ventricule droit', { idf }).erreurs.slice(0, 1), ['Le ventricule droit lutte contre la pression pulmonaire.']);
+  carte.bareme.pieges.push({ si: 'oreillette', sauf: 3, pourquoi: 'x' }, { si: 'aorte', sauf: ' !! ', pourquoi: 'x' });
+  const m = verifierBareme(carte).join('\n');
+  assert.match(m, /piège 2 : « sauf » doit être un texte \(vide s'il n'y a pas d'exception\)/);
+  assert.match(m, /piège 3 : « sauf » ne contient aucun mot/);
 });
 
 test('verifierBareme : texte à trous', () => {

@@ -118,7 +118,8 @@ test('parJour : aujourd\'hui, hier (journal), jour de v1, jour vide', () => {
   const r = parJour(d, T, 4);
   assert.deepStrictEqual(r, [
     { jour: '2026-10-12', acquises: 4, reponses: 5, justes: 2, nouvelles: 2, qcm: 2, pointsQcm: 1.2 },
-    { jour: '2026-10-11', acquises: 3, reponses: 7, justes: 2, nouvelles: 1, qcm: 1, pointsQcm: 0.5 },
+    // jour de bascule : journal (7 réponses, 2 justes, 1 nouvelle) + v1 (n 5, right 5, nw 5)
+    { jour: '2026-10-11', acquises: 3, reponses: 12, justes: 7, nouvelles: 6, qcm: 1, pointsQcm: 0.5 },
     { jour: '2026-10-10', acquises: null, reponses: 82, justes: 19, nouvelles: 0, qcm: 0, pointsQcm: 0 },
     { jour: '2026-10-09', acquises: 0, reponses: 0, justes: 0, nouvelles: 0, qcm: 0, pointsQcm: 0 },
   ]);
@@ -145,6 +146,13 @@ test('parJour : 14 jours par défaut, du plus récent au plus ancien, sans histo
   const sansRien = { srs: {}, reponses: [], qcmJournal: [], historique: null };
   assert.equal(parJour(sansRien, T, 3).length, 3);
   assert.deepEqual(parJour(donneesDe(), T, 0), []);
+});
+
+test('parJour : aujourd\'hui, journal et historique de v1 s\'additionnent', () => {
+  const reponses = [ligne('a', T - HEURE, { nouvelle: true }), ligne('b', T - 30 * MIN, { verdict: 'faux', note: 1 })];
+  const d = donneesDe({ reponses, historique: { days: { '2026-10-12': { n: 20, judged: 18, right: 9, nw: 4 } } } });
+  const [auj] = parJour(d, T, 1);
+  assert.deepStrictEqual(auj, { jour: '2026-10-12', acquises: acquisesDuJour(d, T), reponses: 22, justes: 10, nouvelles: 5, qcm: 0, pointsQcm: 0 });
 });
 
 test('parJour : jours de v1 avec historique incomplet', () => {

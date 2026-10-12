@@ -1,0 +1,15 @@
+{
+  "name": "rappel",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Rappel 2 : cartes de révision avec correction intelligente, micro et QCM",
+  "scripts": {
+    "test": "node --test tests/unit/",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/",
+    "verifier": "node outils/verifier-donnees.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

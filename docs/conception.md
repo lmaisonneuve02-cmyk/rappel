@@ -434,3 +434,17 @@ Réglages → Correction → « Tester la correction » (clé Gemini requise) : 
 - Op `carnet` : accepter une formulation la retire des refusées, et inversement. Op `fichier` : `path` relatif à la racine `rappel/`, `texte: null` supprime.
 - `ouvrirStockage(nom, {indexedDB})` renvoie aussi `vider()` (pour « Effacer les données de cet appareil ») et `enMemoire`.
 - `tests/fixtures/faux-github.mjs` : `creerFauxGitHub({fichiers})` → `{fetch, fichiers(), commits(), requetes(), viderRequetes(), intercepter(fn), horsLigne(bool), tete(), forcerCommitConcurrent(fichiers)}` ; réutilisable par les tests E2E.
+
+### seance.js, qcm.js, stats.js
+- `new Seance({maintenant})` accepte un nombre ou une fonction horloge ; `majDonnees(donnees)` remplace la référence ; l'état utilisé pour noter est le plus récent (last) entre `donnees.srs` et celui que la séance vient de calculer. `restantes` inclut la carte affichée. Une carte fausse revient à l'index i+4. `pauseToutes: 0` supprime la pause.
+- Jour de bascule (décision) : `nouvellesDuJour` et `parJour` additionnent le journal de v2 et `historique.days[jour]` (nw, n, right) du même jour : les cartes nouvelles faites dans v1 ce jour-là comptent dans la limite.
+- QCM : une réponse sans case cochée se note par discordances comme les autres (règle UNESS). `etatQcm().derniere` est la dernière ligne du journal. `choisirQcm` avec un cours choisi propose ses QCM même si aucune carte du cours n'a encore été vue.
+- `lignesEffectives` : la ligne contestée prend le verdict et la note de la contestation (champ `contestation: id`) ; la ligne de contestation ne compte pas à part.
+- Contestations refusées : `correction.js` ajoute un cas `a-revoir` de type `contestation` avec `issue: "refuse"` ; acceptées : ligne `contestation` dans le journal + cas `a-revoir` avec `issue: "accepte"`.
+- Énoncés à la négative dans les QCM : à l'écran, la correction dit « À cocher » / « À ne pas cocher » plutôt que « Vrai » / « Faux ».
+
+### gemini.js
+- Exports en plus : `SCHEMA_CONTESTATION`, `SCHEMA_QCM`, `SCHEMA_REPONSE_QCM`, `reglagesModele`, `lireReponse`, `requeteContestation`, `requeteGenerationQcm`, `requeteReponseQcm` ; options `delai`, `pause`, `maintenant`. `ErreurGemini` porte `code`, `status`, `attente` (quota, ms), `detail` ; son `message` est en français, prêt à afficher. L'interface ajoute la suite selon le contexte (« Je corrige sur ton appareil. »).
+- Contestation : le verdict ne change que si `etudiant_a_raison` est vrai ET que le verdict proposé est meilleur ; `analyse` est renvoyée (champ `avis` du cas à revoir).
+- `formulation` vaut null si identique à la réponse attendue ; abréviations apprises filtrées (5 au plus).
+- Génération de QCM : l'interface passe `delai: 60000`.

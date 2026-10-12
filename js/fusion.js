@@ -26,7 +26,8 @@ export function fusionSrs(a, b) {
 
 const cleLigne = l => (l && l.id != null ? 'id:' + l.id : 'json:' + JSON.stringify(l));
 
-const parTs = (x, y) => (x.ts || 0) - (y.ts || 0) || String(x.id ?? '').localeCompare(String(y.id ?? ''));
+const compare = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
+const parTs = (x, y) => (x.ts || 0) - (y.ts || 0) || compare(String(x.id ?? ''), String(y.id ?? ''));
 
 // Union par id (a gagne si même id), triée par ts.
 function unionParId(a, b, fusionner = x => x) {

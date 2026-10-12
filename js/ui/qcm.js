@@ -40,6 +40,7 @@ export function creer(ctx, params = {}) {
   const vue = { noeud, titre: 'QCM', onglet: 'qcm', barreHaut: null, plein: false };
   let mode = 'accueil';
   let signature = '';
+  let choixOuvert = null;   // ouverture de « Choisir un cours » décidée par l'utilisateur
   let serie = null;
   let actionEntree = null;
   let entree = null;
@@ -61,7 +62,6 @@ export function creer(ctx, params = {}) {
     const sig = JSON.stringify([melange.length, dus, proposables.length, journal.length, cle, cours.length, [...generations.entries()], r.baremeQcm, n]);
     if (!force && sig === signature) return;
     signature = sig;
-    const ouvert = page.querySelector('details.choix-cours')?.open;
 
     const parCours = new Map();
     for (const q of proposables) parCours.set(q.cours, (parCours.get(q.cours) || 0) + 1);
@@ -95,8 +95,8 @@ export function creer(ctx, params = {}) {
           ? h('p', { class: 'chiffres', text: `${nb(melange.length, 'question')} · environ ${melange.length} min${dus ? ` · dont ${dus} à refaire aujourd'hui` : ''}` })
           : h('p', { class: 'aide', text: proposables.length ? 'Rien de neuf dans les cours que tu as commencés. Choisis un cours ci-dessous.' : 'Pas encore de QCM. Ils arrivent pour les cours commencés en cartes.' }),
         h('p', { class: 'aide', text: baremeTexte(r.baremeQcm) })),
-      h('details', { class: 'details choix-cours', open: !!ouvert || !melange.length },
-        h('summary', null, `Choisir un cours (${cours.length})`),
+      h('details', { class: 'details choix-cours', open: choixOuvert ?? !melange.length },
+        h('summary', { onclick: e => { choixOuvert = !e.currentTarget.parentElement.open; } }, `Choisir un cours (${cours.length})`),
         cle ? h('p', { class: 'aide', text: '« Générer 5 QCM » : Gemini les écrit à partir de tes cartes et de la fiche, puis un second passage les vérifie (environ 30 s).' })
           : h('p', { class: 'aide' }, 'Pour générer des QCM : ajoute ta clé Gemini dans ', h('button', { type: 'button', class: 'lien', text: 'Réglages', onclick: () => ctx.aller('reglages', { section: 'cles' }) }), '.'),
         h('ul', { class: 'liste-cours' }, lignes)));
@@ -230,7 +230,7 @@ export function creer(ctx, params = {}) {
     const zoneSignal = h('div', { class: 'contestation' });
     const lienSignal = h('button', { type: 'button', class: 'lien', text: 'Signaler une erreur', onclick: () => signaler(q, zoneSignal, lienSignal) });
     vider(page,
-      h('p', { class: 'question question--petite', text: q.enonce }),
+      h('p', { class: 'question question--petite question--entiere', text: q.enonce }),
       h('div', { class: ['verdict', `verdict--${classe}`], tabindex: '-1' },
         h('div', { class: 'verdict__tete' }, icone(classe === 'juste' ? 'juste' : classe === 'partiel' ? 'partiel' : 'faux', { classe: 'verdict__icone' }),
           h('h2', { class: 'verdict__mot', text: titre })),

@@ -123,7 +123,7 @@ export function creer(ctx) {
       const prochaines = demain(d, now);
       blocs.push(h('section', { class: 'bloc-seance' },
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
-        h('h1', { class: 'titre-page' }, paquetNom ? `Rien à faire dans ce paquet` : "Tout est fait pour aujourd'hui", ' ', icone('juste', { classe: 'icone--reussite' })),
+        h('h1', { class: 'titre-page titre-page--icone' }, icone('juste', { classe: 'icone--reussite' }), h('span', { text: paquetNom ? 'Rien à faire dans ce paquet' : "Tout est fait pour aujourd'hui" })),
         paquetNom && total.total ? h('p', { class: 'chapeau', text: `Il reste ${nb(total.total, 'carte')} dans les autres paquets.` }) : null,
         reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Encore ${reste} pour l'objectif. ` }), 'Révise en avance : elles comptent dans tes acquises.') : null,
         prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
@@ -133,8 +133,9 @@ export function creer(ctx) {
     const limite = Number(d.reglages.nouvellesParJour) || 0;
     const jamaisVues = cartesRestantesJamaisVues(d);
     if (filtre === 'tout' && r.nouvelles === 0 && jamaisVues > 0 && nouvellesDuJour(d, now) >= limite) {
-      blocs.push(h('p', { class: 'aide aide--ligne' }, `Les ${limite} nouvelles cartes du jour sont faites. Pour en avoir plus : `,
-        h('button', { type: 'button', class: 'lien', onclick: () => ctx.aller('reglages', { section: 'rythme' }), text: 'Réglages › Rythme' }), '.'));
+      blocs.push(h('div', { class: 'bloc' },
+        h('p', { class: 'aide', text: limite > 0 ? `Les ${limite} nouvelles cartes du jour sont faites. Tu peux en demander plus dans Réglages.` : 'Nouvelles cartes : 0 par jour pour le moment. Tu peux en demander dans Réglages.' }),
+        h('button', { type: 'button', class: 'lien', onclick: () => ctx.aller('reglages', { section: 'rythme' }), text: 'Réglages › Rythme' })));
     } else if (filtre === 'tout' && jamaisVues === 0) {
       blocs.push(h('p', { class: 'aide', text: 'Tu as vu toutes les cartes des cours préparés. Les prochains paquets arriveront avec de nouveaux cours.' }));
     }

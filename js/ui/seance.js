@@ -90,7 +90,7 @@ export function creer(ctx, params = {}) {
 
   function majHaut(rang, total) {
     if (rang) { rang0 = rang; total0 = total; }
-    position.textContent = etat === 'fin' ? 'Séance terminée' : total0 ? `Carte ${Math.min(rang0, total0)} sur ${total0}` : '';
+    position.textContent = etat === 'fin' ? '' : etat === 'fiche' ? 'Micro-fiche' : total0 ? `Carte ${Math.min(rang0, total0)} sur ${total0}` : '';
     progression.max = Math.max(1, total0);
     progression.value = etat === 'fin' ? progression.max : Math.max(0, rang0 - 1);
     terminer.hidden = etat === 'fin';
@@ -162,7 +162,7 @@ export function creer(ctx, params = {}) {
     }
     majHaut();
     vider(contenu,
-      h('p', { class: 'surtitre surtitre--veineux', text: 'Avant les nouvelles cartes : la micro-fiche' }),
+      h('p', { class: 'surtitre surtitre--veineux', text: 'Avant les nouvelles cartes' }),
       h('div', { class: 'feuille-fiche' }, ficheNoeud(fiche)),
       ensuite ? h('p', { class: 'aide', text: `Ensuite : ${nb(ensuite, 'nouvelle carte', 'nouvelles cartes')} de ce cours.` }) : null);
     const lu = () => { seance.ficheVue(); suivant(); };
@@ -330,7 +330,9 @@ export function creer(ctx, params = {}) {
     const peutContester = !v.conteste && (r.verdict === 'partiel' || r.verdict === 'faux')
       && !['auto', 'je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne();
 
-    const bandeauVerdict = verdictNoeud(r, { lignes: [delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
+    const bandeauVerdict = verdictNoeud(r, { lignes: nsp
+      ? [`Pas grave. ${delai}`, h('p', { class: 'verdict__effet', text: 'Réussis-la à ce moment-là : elle comptera.' })]
+      : [delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
     const attendue = h('section', { class: 'bloc-liste' }, h('h3', { class: 'petit-titre', text: 'Réponse attendue' }), reponseAttendue(carte));
     const taReponse = v.reponse ? h('section', { class: 'bloc-liste bloc-liste--doux' }, h('h3', { class: 'petit-titre', text: 'Ta réponse' }), h('p', { class: 'ta-reponse', text: `« ${v.reponse} »` })) : null;
     const trouvees = liste('Ce que tu as dit de juste', r.idees_trouvees, 'bloc-liste--juste');
@@ -344,8 +346,7 @@ export function creer(ctx, params = {}) {
     } else if (r.verdict === 'partiel') {
       corps = [manque, erreurs, explication, attendue, trouvees, taReponse];
     } else {
-      corps = [nsp ? h('p', { class: 'explication', text: 'Pas grave : voici la réponse. Elle revient dans 10 minutes.' }) : null,
-        attendue, manque, erreurs, nsp ? null : explication, taReponse];
+      corps = [attendue, manque, erreurs, nsp ? null : explication, taReponse];
     }
 
     const zoneContestation = h('div', { class: 'contestation' });
@@ -382,7 +383,7 @@ export function creer(ctx, params = {}) {
     const btnSuivant = bouton('Suivant', { principal: true, onClick: continuer });
     vider(barre, btnSuivant);
     actionEntree = () => { if (Date.now() - affiche > DELAI_ENTREE) continuer(); };
-    const mot = nsp ? 'La réponse' : VERDICTS[r.verdict]?.mot || 'Faux';
+    const mot = nsp ? 'Voici la réponse' : VERDICTS[r.verdict]?.mot || 'Faux';
     annoncer(`${mot}. ${delai} ${ligneEffet}`);
     if (estTactile()) bandeauVerdict.focus({ preventScroll: true });
     else btnSuivant.focus({ preventScroll: true });

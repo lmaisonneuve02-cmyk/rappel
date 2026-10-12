@@ -60,7 +60,7 @@ export function creer(ctx, params = {}) {
     const cles = ctx.cles();
     const zone = h('div', { class: 'zone-message', 'aria-live': 'polite' });
     const { bloc, input } = champSecret({ id: 'r-jeton', libelle: "Jeton d'accès GitHub",
-      placeholder: cles.jeton ? 'Enregistré · colle un nouveau jeton pour le remplacer' : 'github_pat_…' });
+      placeholder: cles.jeton ? 'Colle un nouveau jeton' : 'github_pat_…' });
     const verifier = bouton('Vérifier', { classe: 'btn--plein', onClick: async () => {
       const jeton = input.value.trim().replace(/\s+/g, '') || ctx.cles().jeton;
       if (!jeton) { message(zone, "Colle d'abord le jeton dans le champ."); return; }
@@ -99,7 +99,7 @@ export function creer(ctx, params = {}) {
     const cles = ctx.cles();
     const zone = h('div', { class: 'zone-message', 'aria-live': 'polite' });
     const { bloc, input } = champSecret({ id: 'r-gemini', libelle: 'Clé Gemini (facultative)',
-      placeholder: cles.gemini ? 'Enregistrée · colle une nouvelle clé pour la remplacer' : 'Colle la clé ici' });
+      placeholder: cles.gemini ? 'Colle une nouvelle clé' : 'Colle la clé ici' });
     const etat = h('p', { class: 'etat-cle' });
     const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
       ctx.definirCles({ gemini: '' }); message(zone, 'Clé retirée : la correction se fera sur ton appareil.', 'info'); maj();
@@ -320,7 +320,10 @@ export function creer(ctx, params = {}) {
 
   // --- Page ---
   let donnees = null;
+  let signature = '';
+  const signer = () => { const d = ctx.donnees(); return JSON.stringify([d.reglages, d.ordre, !!d.calibration]); };
   function afficher() {
+    signature = signer();
     const r = ctx.reglages();
     donnees = blocDonnees();
     vider(page,
@@ -366,6 +369,14 @@ export function creer(ctx, params = {}) {
       }
     },
     surEtat: () => donnees?.majEtat(),
+    // Réglages arrivés d'un autre appareil (ou premier chargement) : on redessine si rien n'est en cours.
+    surDonnees: () => {
+      if (enCours || signer() === signature) return;
+      if (page.contains(document.activeElement) && document.activeElement.matches('input, select, textarea')) return;
+      const y = window.scrollY;
+      afficher();
+      window.scrollTo(0, y);
+    },
     quitter: () => { vidanger(); try { parole?.arreter(); } catch { /* rien */ } },
   };
 }

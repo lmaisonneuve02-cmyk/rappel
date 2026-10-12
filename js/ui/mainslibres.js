@@ -33,7 +33,7 @@ export function creer(ctx, params = {}) {
   const zoneReponse = h('p', { class: 'ml-reponse' });
   const zoneVerdict = h('div', { class: 'ml-verdict' });
   const zoneFiche = h('div', { class: 'ml-fiche' });
-  const btnPause = bouton('Pause', { principal: true, icone: 'pause', classe: 'btn--geant', onClick: () => basculer() });
+  const btnPause = bouton('Pause', { icone: 'pause', classe: 'btn--geant btn--calme', onClick: () => basculer() });
 
   let phase = '';
   function basculer() {
@@ -56,8 +56,9 @@ export function creer(ctx, params = {}) {
     zoneQuestion.textContent = d.phase === 'fin' ? '' : d.carte ? plainQ(d.carte) : d.qcm ? d.qcm.enonce || '' : (verdict ? '' : d.texte || '');
     if (verdict) {
       const v = VERDICTS[verdict.verdict] || VERDICTS.faux;
-      vider(zoneVerdict, h('div', { class: ['verdict', `verdict--${verdict.verdict}`] },
-        h('div', { class: 'verdict__tete' }, icone(v.icone, { classe: 'verdict__icone' }), h('p', { class: 'verdict__mot', text: verdict.correcteur === 'je-ne-sais-pas' ? 'La réponse' : v.mot })),
+      const nsp = verdict.correcteur === 'je-ne-sais-pas';
+      vider(zoneVerdict, h('div', { class: ['verdict', `verdict--${nsp ? 'nsp' : verdict.verdict}`] },
+        h('div', { class: 'verdict__tete' }, icone(nsp ? 'fiche' : v.icone, { classe: 'verdict__icone' }), h('p', { class: 'verdict__mot', text: nsp ? 'Voici la réponse' : v.mot })),
         d.texte ? h('p', { class: 'verdict__ligne', text: d.texte }) : null));
     } else vider(zoneVerdict);
     const rep = d.partiel || d.reponse || '';

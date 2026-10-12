@@ -353,9 +353,9 @@ export const BADGES = {
 export function verdictNoeud(resultat, { lignes = [], titre = null } = {}) {
   const v = VERDICTS[resultat?.verdict] || VERDICTS.faux;
   const nsp = resultat?.correcteur === 'je-ne-sais-pas';
-  return h('div', { class: ['verdict', `verdict--${resultat?.verdict || 'faux'}`], tabindex: '-1' },
-    h('div', { class: 'verdict__tete' }, icone(v.icone, { classe: 'verdict__icone' }),
-      h('h2', { class: 'verdict__mot', text: titre || (nsp ? 'La réponse' : v.mot) })),
+  return h('div', { class: ['verdict', `verdict--${nsp ? 'nsp' : resultat?.verdict || 'faux'}`], tabindex: '-1' },
+    h('div', { class: 'verdict__tete' }, icone(nsp ? 'fiche' : v.icone, { classe: 'verdict__icone' }),
+      h('h2', { class: 'verdict__mot', text: titre || (nsp ? 'Voici la réponse' : v.mot) })),
     lignes.filter(Boolean).map(l => (l instanceof Node ? l : h('p', { class: 'verdict__ligne', text: l }))));
 }
 

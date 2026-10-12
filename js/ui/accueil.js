@@ -47,6 +47,7 @@ export function creer(ctx) {
   function message(zone, texte, type = 'erreur') {
     vider(zone, texte ? h('p', { class: ['message', `message--${type}`], role: type === 'erreur' ? 'alert' : 'status' },
       icone(type === 'ok' ? 'juste' : type === 'erreur' ? 'attention' : 'info'), h('span', { text: texte })) : null);
+    if (texte) requestAnimationFrame(() => zone.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   }
 
   function entete(titre) {
@@ -95,7 +96,7 @@ export function creer(ctx) {
 
     vider(racine,
       entete('Relier tes cartes'),
-      h('p', { class: 'chapeau', text: `Bienvenue. Tes cartes et tes progrès sont dans ton dépôt GitHub « ${depot.depot} ». Pour les lire et y enregistrer tes réponses, Rappel a besoin d'un jeton d'accès : un mot de passe limité à ce dépôt, créé une seule fois.` }),
+      h('p', { class: 'chapeau', text: `Bienvenue. Rappel lit tes cartes et enregistre tes réponses dans ton dépôt GitHub « ${depot.depot} ». Il lui faut un jeton d'accès : un mot de passe limité à ce dépôt, créé une seule fois.` }),
       h('ol', { class: 'marche' },
         h('li', null, 'Touche ', h('strong', { text: 'Créer le jeton sur GitHub' }), ' (connecte-toi si besoin).'),
         h('li', null, 'Nom : Rappel. ', h('strong', { text: '« Expiration »' }), ' : la plus longue possible.'),

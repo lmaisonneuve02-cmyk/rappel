@@ -110,10 +110,13 @@ function analyserPhrase(texte, Q, abreviations) {
     const gardees = racines.filter(s => !Q.set.has(s));
     if (gardees.length) racines = gardees;
   }
-  return { texte, racines, nombres: [...an.nums], mots: an.words, paires: an.pairs };
+  // Phrase faite seulement de mots vides (« Type ») : cherchée telle quelle, en mot entier.
+  const litteral = !racines.length && !an.nums.size && norm(texte) ? texte : null;
+  return { texte, racines, nombres: [...an.nums], mots: an.words, paires: an.pairs, litteral };
 }
 
-function phraseTrouvee(P, A, idf) {
+function phraseTrouvee(P, A, idf, entoure) {
+  if (P.litteral) return contient(entoure, P.litteral);
   const jointes = new Set();
   for (const [a, b, j] of P.paires) if (A.set.has(j)) { jointes.add(a); jointes.add(b); }
   const total = P.racines.reduce((s, x) => s + idf(x), 0) || 1;
@@ -196,6 +199,7 @@ export function corrigerLocal(carte, reponse, { idf, abreviations } = {}) {
   const poids = typeof idf === 'function' ? idf : () => 1;
   const texte = String(reponse ?? '');
   const A = analyze(texte, abreviations);
+  const entoure = ` ${norm(texte)} `;
   // Comme v1 : pas de retrait des mots de la question pour un texte à trous (elle contient les réponses).
   const Q = carte.type === 'cloze' ? null : analyze(carte.q || '', abreviations);
 
@@ -204,7 +208,7 @@ export function corrigerLocal(carte, reponse, { idf, abreviations } = {}) {
       ...i,
       phrases: [i.texte, ...i.formulations]
         .map(t => analyserPhrase(t, Q, abreviations))
-        .filter(P => P.racines.length || P.nombres.length),
+        .filter(P => P.racines.length || P.nombres.length || P.litteral),
     }))
     .filter(i => i.phrases.length);
   if (!idees.length) {
@@ -220,7 +224,7 @@ export function corrigerLocal(carte, reponse, { idf, abreviations } = {}) {
   const trouvees = [], manquantes = [], erreurs = piegesDeclenches(carte, texte), signales = new Set();
   let total = 0, nTrouvees = 0;
   for (const i of idees) {
-    const ok = i.phrases.some(P => phraseTrouvee(P, A, poids));
+    const ok = i.phrases.some(P => phraseTrouvee(P, A, poids, entoure));
     if (obligatoire(i)) { total++; if (ok) nTrouvees++; }
     if (ok) { trouvees.push(i.texte); continue; }
     if (!obligatoire(i)) continue;

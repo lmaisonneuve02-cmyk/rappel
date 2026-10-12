@@ -330,3 +330,14 @@ test('verifierBareme : texte à trous', () => {
   assert.match(m, /idée t3 : chaque trou est une idée obligatoire/);
   assert.doesNotMatch(m, /idée t1/);
 });
+
+test('phrase faite seulement de mots vides : cherchée telle quelle', async () => {
+  const { corrigerLocal } = await import('../../js/correcteur.js');
+  const carte = { id: 'x1', type: 'fait', q: 'Que veut dire SITE ?', a: 'Siège, irradiation, type, évolution.',
+    bareme: { idees: [
+      { id: 'k1', texte: 'Siège', formulations: ['localisation', 'endroit'], obligatoire: true },
+      { id: 'k2', texte: 'Type', formulations: ['caractère de la douleur', 'nature'], obligatoire: true },
+    ], pieges: [] } };
+  assert.equal(corrigerLocal(carte, carte.a).verdict, 'juste');
+  assert.equal(corrigerLocal(carte, 'siège seulement').verdict, 'partiel');
+});

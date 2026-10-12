@@ -178,8 +178,12 @@ export function creer(ctx, params = {}) {
     const lignes = (q.propositions || []).map(p => {
       const id = `prop-${p.l}`;
       const caseCocher = h('input', { type: 'checkbox', id, class: 'proposition__case', 'data-lettre': p.l });
-      caseCocher.addEventListener('change', () => { if (caseCocher.checked) cochees.add(p.l); else cochees.delete(p.l); });
-      return h('label', { class: 'proposition', for: id }, caseCocher,
+      const ligne = h('label', { class: 'proposition', for: id });
+      caseCocher.addEventListener('change', () => {
+        if (caseCocher.checked) cochees.add(p.l); else cochees.delete(p.l);
+        ligne.classList.toggle('cochee', caseCocher.checked);
+      });
+      return vider(ligne, caseCocher,
         h('span', { class: 'proposition__lettre', 'aria-hidden': 'true' }, h('span', { text: p.l }), icone('juste')),
         h('span', { class: 'proposition__texte' }, h('span', { class: 'lecteur-seul', text: `${p.l}. ` }), p.t));
     });

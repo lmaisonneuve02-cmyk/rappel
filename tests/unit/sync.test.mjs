@@ -422,3 +422,54 @@ test('fichier distant abîmé : jamais écrasé, message clair', async () => {
   assert.equal(gh.fichiers()[SRS], '{"cards": {abîmé');
   s.arreter();
 });
+
+test('changement de dossier (même tête) : cache rechargé, ops jamais envoyées dans un autre dépôt', async () => {
+  const A = 'autre/';
+  const SRS_A = A + 'progres/srs/p.json';
+  const fichiers = {
+    ...depotTest(),
+    [A + 'paquets/p.json']: serialiser('p.json', { id: 'p', nom: 'Paquet autre', ue: 'ue', ordre: 1, cartes: [
+      { id: 'x', type: 'fait', q: 'X ?', a: 'X.' }, { id: 'y', type: 'fait', q: 'Y ?', a: 'Y.' }, { id: 'z', type: 'fait', q: 'Z ?', a: 'Z.' }] }),
+    [SRS_A]: serialiser(SRS_A, { cards: { x: etat(T - 864e5), y: etat(T - 864e5) } }),
+  };
+  const gh = creerFauxGitHub({ fichiers });
+  const stockage = await ouvrirStockage();
+  const cfg = { jeton: 'jeton-test', proprietaire: 'moi', depot: 'etudes', branche: 'main', racine: R };
+  const nouvelle = () => new Synchro({ stockage, creerClient: c => new ClientGitHub({ ...c, fetch: gh.fetch }), config: () => cfg, maintenant: () => T, delaiEnvoi: 60_000 });
+  const s = nouvelle();
+  await s.demarrer();
+  await reponse(s, 'tel', T + 1000, 'p1-02'); // en attente pour rappel/
+  assert.equal(s.etat.attente, 1);
+
+  // « Avancé : dépôt » : dossier autre/ (même dépôt, même tête).
+  cfg.racine = A;
+  await s.rafraichir('ouverture');
+  assert.equal(s.donnees().paquets.p1, undefined);
+  assert.deepEqual(Object.keys(s.donnees().srs.p).sort(), ['x', 'y']);
+  assert.equal(s.etat.attente, 0); // les réponses de rappel/ ne partent pas ici
+  assert.equal(gh.commits().length, 1);
+
+  // Réouverture de l'appli sur autre/ : toujours rien d'envoyé ici.
+  s.arreter();
+  const s2 = nouvelle();
+  await s2.demarrer();
+  assert.equal(s2.etat.attente, 0);
+  assert.equal(gh.commits().length, 1);
+
+  // Une réponse dans autre/ : x et y restent.
+  s2.ajouter({ type: 'srs', paquet: 'p', carte: 'z', etat: etat(T + 3000) });
+  await s2.pousser('manuel');
+  assert.deepEqual(Object.keys(analyser(SRS_A, gh.fichiers()[SRS_A]).cards).sort(), ['x', 'y', 'z']);
+  assert.equal(gh.fichiers()[A + 'progres/srs/p1.json'], undefined);
+  assert.equal(analyser(SRS, gh.fichiers()[SRS]).cards['p1-02'], undefined);
+
+  // Retour à rappel/ : les réponses gardées partent enfin, au bon endroit.
+  cfg.racine = R;
+  await s2.rafraichir('ouverture');
+  assert.equal(s2.etat.mode, 'a-jour');
+  assert.equal(analyser(SRS, gh.fichiers()[SRS]).cards['p1-02'].last, T + 1000);
+  assert.deepEqual(Object.keys(analyser(SRS_A, gh.fichiers()[SRS_A]).cards).sort(), ['x', 'y', 'z']);
+  assert.equal(s2.donnees().paquets.p, undefined);
+  assert.equal(s2.donnees().paquets.p1.nom, 'Paquet « un »');
+  s2.arreter();
+});

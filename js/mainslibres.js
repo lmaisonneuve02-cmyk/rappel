@@ -605,9 +605,12 @@ export class MainsLibres extends EventTarget {
     else {
       if (c.ops?.length) await enregistrer(c.ops);
       if (c.accepte) {
-        this._compter(ctx.resultat.verdict, -1);
+        const ancien = ctx.resultat.verdict;
+        this._compter(ancien, -1);
         ctx.resultat = c.resultat || ctx.resultat;
         this._compter(ctx.resultat.verdict, 1);
+        // La carte n'est plus fausse : elle ne doit pas revenir plus loin dans la séance.
+        this.seance?.corrigerVerdict?.(paquet, carte.id, ancien, ctx.resultat.verdict);
         ctx.issue = 'Tu avais raison, je corrige.';
       } else {
         const pourquoi = sansPoint(c.resultat?.explication || c.explication || '');

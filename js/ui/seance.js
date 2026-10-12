@@ -77,6 +77,9 @@ export function creer(ctx, params = {}) {
   let rang0 = 0, total0 = 0;
   const ratees = new Set();
   let entree = null;
+  let correctionEnCours = false;   // une réponse part à la correction (Gemini) : elle comptera même après « Terminer »
+  let verdictAffiche = null;       // verdict à l'écran (une contestation qui aboutit plus tard ne le réaffiche que s'il y est encore)
+  let quitte = false;
 
   // --- Barre du haut : Terminer, position, progression ---
   const position = h('p', { class: 'seance-haut__position', 'aria-live': 'off' });
@@ -154,12 +157,7 @@ export function creer(ctx, params = {}) {
   function afficherFicheEtape(e) {
     etat = 'fiche';
     const fiche = donnees.fiches[e.ficheId];
-    let ensuite = 0;
-    for (let k = seance.i; k < seance.file.length; k++) {
-      const el = seance.file[k];
-      const c = donnees.cartes[el.carteId]?.carte;
-      if (c && !donnees.srs[el.paquet]?.[el.carteId] && ficheDe(donnees, c, el.paquet) === fiche) ensuite++;
-    }
+    const ensuite = seance.nouvellesDeFiche(e.ficheId);
     majHaut();
     vider(contenu,
       h('p', { class: 'surtitre surtitre--veineux', text: 'Avant les nouvelles cartes' }),
@@ -240,6 +238,7 @@ export function creer(ctx, params = {}) {
   async function corrigerCarte(e, texte, jeNeSaisPas = false) {
     if (etat !== 'carte') return;
     etat = 'correction';
+    correctionEnCours = true;
     actionEntree = null;
     arreterMicro();
     const { carte, paquet } = e;
@@ -272,7 +271,12 @@ export function creer(ctx, params = {}) {
       res.resultat.correcteur = 'local';
     }
     clearTimeout(t1);
-    noter(e, res.resultat, reponse, res.ops || [], true);
+    correctionEnCours = false;
+    // « Terminer » (ou un autre écran) pendant la correction : la réponse compte, sans réafficher le verdict.
+    const visible = etat === 'correction' && !quitte;
+    noter(e, res.resultat, reponse, res.ops || [], visible);
+    if (etat === 'fin') rendreFin();
+    else if (quitte) ctx.sync.pousser('fin-seance').catch(() => {});
   }
 
   // Note la carte, enregistre les opérations, puis affiche le verdict (ou passe à la suite).
@@ -305,20 +309,14 @@ export function creer(ctx, params = {}) {
 
   // Ajuste la séance après une contestation acceptée (la carte ratée ne doit plus revenir).
   function corrigerSeance(v, ancien, nouveau) {
-    try {
-      if (ancien === 'faux' && nouveau !== 'faux' && Array.isArray(seance.file)) {
-        const j = seance.file.findIndex((el, k) => k >= seance.i && el.paquet === v.e.paquet && el.carteId === v.e.carte.id);
-        if (j >= 0) seance.file.splice(j, 1);
-        ratees.delete(v.e.paquet + '/' + v.e.carte.id);
-      }
-      const champ = { juste: 'justes', partiel: 'partielles', faux: 'fausses' };
-      if (champ[ancien] in seance && champ[nouveau] in seance) { seance[champ[ancien]]--; seance[champ[nouveau]]++; }
-    } catch { /* la séance continue telle quelle */ }
+    seance.corrigerVerdict(v.e.paquet, v.e.carte.id, ancien, nouveau);
+    if (nouveau !== 'faux') ratees.delete(v.e.paquet + '/' + v.e.carte.id);
   }
 
   // --- Verdict ---
   function afficherVerdict(v) {
     etat = 'verdict';
+    verdictAffiche = v;
     const { carte, paquet } = v.e;
     const r = v.resultat;
     const nsp = r.correcteur === 'je-ne-sais-pas';
@@ -422,19 +420,31 @@ export function creer(ctx, params = {}) {
         donnees = ctx.donnees();
         seance.majDonnees(donnees);
         v.conteste = true;
+        const mot = VERDICTS[c.accepte ? c.resultat.verdict : ancien]?.mot || (c.accepte ? c.resultat.verdict : ancien);
         if (c.accepte) {
           corrigerSeance(v, ancien, c.resultat.verdict);
           v.resultat = c.resultat;
           if (c.etatApres) v.etatApres = c.etatApres;
-          v.issue = { ok: true, texte: `Tu avais raison : verdict corrigé en « ${VERDICTS[c.resultat.verdict]?.mot || c.resultat.verdict} ».` };
+          v.issue = { ok: true, texte: `Tu avais raison : verdict corrigé en « ${mot} ».` };
         } else {
           const expl = c.resultat?.explication || c.avis?.explication || '';
-          v.issue = { ok: false, texte: `Le second avis maintient « ${VERDICTS[ancien]?.mot || ancien} ».${expl ? ' ' + expl : ''}` };
+          v.issue = { ok: false, texte: `Le second avis maintient « ${mot} ».${expl ? ' ' + expl : ''}` };
         }
-        afficherVerdict(v);
+        if (etat === 'verdict' && verdictAffiche === v && !quitte) afficherVerdict(v);
+        else {
+          // Il est déjà passé à la suite : l'issue est signalée sans le ramener en arrière.
+          toast(c.accepte ? `Second avis : tu avais raison, verdict corrigé en « ${mot} ».` : `Second avis : « ${mot} » est maintenu.`, { duree: 5000 });
+          if (etat === 'fin' && !quitte) rendreFin();
+          else if (etat === 'carte' && c.accepte) {
+            const suite = seance.etape();   // la reprise a pu disparaître : « Carte 2 sur 5 » au lieu de « sur 6 »
+            if (suite.type === 'carte') majHaut(suite.rang, suite.total);
+          }
+        }
       } catch (err) {
+        const message = err?.name === 'ErreurGemini' ? `${err.message} Réessaie plus tard.` : 'Pas de second avis possible maintenant. Réessaie plus tard.';
+        if (!(etat === 'verdict' && verdictAffiche === v) || quitte) { toast(`Second avis : ${message}`, { duree: 5000 }); return; }
         statut.className = 'statut-micro statut-micro--erreur';
-        statut.textContent = err?.name === 'ErreurGemini' ? `${err.message} Réessaie plus tard.` : 'Pas de second avis possible maintenant. Réessaie plus tard.';
+        statut.textContent = message;
         envoyer.disabled = false;
         annuler.disabled = false;
         raison.readOnly = false;
@@ -482,20 +492,27 @@ export function creer(ctx, params = {}) {
 
   function afficherFin() {
     if (etat === 'fin') return;
-    const etape = seance.etape();
-    const interrompue = etape.type !== 'fin';
     etat = 'fin';
+    verdictAffiche = null;
     arreterMicro();
     actionEntree = null;
     touches = null;
     majHaut();
+    rendreFin();
+  }
+
+  // Bilan de fin (rejoué si une correction en cours aboutit après « Terminer »).
+  function rendreFin() {
+    if (quitte) return;
     ctx.sync.pousser('fin-seance').catch(() => {});
     majLigneSynchro();
+    const interrompue = seance.etape().type !== 'fin';
     const b = seance.bilan;
     const obj = ctx.objectif();
     const n = ctx.acquises();
     const reste = Math.max(0, obj - n);
-    const restantes = interrompue ? Math.max(0, (seance.file?.length || 0) - (seance.i || 0)) : 0;
+    // La carte en cours de correction ne compte plus parmi les restantes : sa réponse est donnée.
+    const restantes = interrompue ? Math.max(0, seance.restantes() - (correctionEnCours ? 1 : 0)) : 0;
     const fiches = (b.fichesARelire || []).map(id => donnees.fiches[id]).filter(Boolean);
     const qcm = qcmProposables(ctx.donnees()).length;
     const nQcm = Math.min(qcm, Number(ctx.reglages().qcmParSeance) || 8);
@@ -511,6 +528,7 @@ export function creer(ctx, params = {}) {
       reste > 0 ? h('p', { class: 'objectif-ligne', text: `Encore ${reste} pour l'objectif.` }) : h('p', { class: 'objectif-ligne', text: "Objectif du jour atteint. Tu peux t'arrêter là." }),
       fiches.length ? h('section', { class: 'a-relire' }, h('h2', { class: 'petit-titre', text: 'Fiches à relire' }),
         h('div', { class: 'pastilles pastilles--enveloppe' }, fiches.map(f => h('button', { type: 'button', class: 'pastille', onclick: () => ouvrirFiche(f) }, icone('fiche'), h('span', { text: titreFiche(f) }))))) : null,
+      correctionEnCours ? h('p', { class: 'aide', 'aria-live': 'polite', text: 'Je finis de corriger ta dernière réponse…' }) : null,
       ligneSynchro);
 
     // Un seul bouton principal, selon la situation.
@@ -518,7 +536,8 @@ export function creer(ctx, params = {}) {
     const retour = () => ctx.aller('aujourdhui');
     if (restantes > 0 && reste > 0) {
       boutons.push(bouton('Retour', { onClick: retour }));
-      boutons.push(bouton(`Continuer · ${nb(restantes, 'carte')}`, { principal: true, onClick: () => {
+      boutons.push(bouton(`Continuer · ${nb(restantes, 'carte')}`, { principal: true, attrs: { disabled: correctionEnCours }, onClick: () => {
+        if (correctionEnCours) return;
         etat = 'reprise';
         if (seance.etape().type === 'pause') seance.continuer();
         suivant();
@@ -533,8 +552,10 @@ export function creer(ctx, params = {}) {
       boutons.push(bouton('Retour', { principal: true, onClick: retour }));
     }
     vider(barre, h('div', { class: 'barre-action__rang' }, boutons));
-    contenu.querySelector('h1').focus({ preventScroll: true });
-    window.scrollTo(0, 0);
+    if (noeud.isConnected) {
+      contenu.querySelector('h1').focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+    }
   }
 
   // --- Clavier ---
@@ -579,6 +600,7 @@ export function creer(ctx, params = {}) {
     surDonnees: d => { donnees = d; seance.majDonnees(d); },
     surEtat: () => { if (etat === 'fin') majLigneSynchro(); },
     quitter: () => {
+      quitte = true;
       document.removeEventListener('keydown', clavier);
       arreterMicro();
       if (entree) { const e = entree; entree = null; depiler(e); }

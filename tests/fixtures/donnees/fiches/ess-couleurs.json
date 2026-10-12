@@ -1,0 +1,63 @@
+{
+ "id": "ess-couleurs",
+ "title": "Essai · Les couleurs",
+ "why": "Fiche synthétique pour les tests.",
+ "order": 1,
+ "blocks": [
+  {
+   "k": "h",
+   "t": "Mélanges"
+  },
+  {
+   "k": "p",
+   "t": "Bleu + jaune = vert. Rouge + blanc = rose."
+  },
+  {
+   "k": "pin",
+   "title": "À retenir",
+   "lines": [
+    "Primaires du peintre : rouge, jaune, bleu.",
+    "Complémentaire du rouge : vert."
+   ]
+  },
+  {
+   "k": "nums",
+   "items": [
+    {
+     "v": "3",
+     "l": "couleurs primaires"
+    },
+    {
+     "v": "6",
+     "l": "couleurs du cercle simple"
+    }
+   ]
+  },
+  {
+   "k": "table",
+   "head": [
+    "Couleur",
+    "Complémentaire"
+   ],
+   "rows": [
+    [
+     {
+      "t": "Rouge",
+      "s": "key"
+     },
+     {
+      "t": "Vert"
+     }
+    ],
+    [
+     {
+      "t": "Bleu"
+     },
+     {
+      "t": "Orange"
+     }
+    ]
+   ]
+  }
+ ]
+}

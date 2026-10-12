@@ -1,0 +1,146 @@
+{
+ "id": "ess-couleurs",
+ "nom": "Essai · Les couleurs",
+ "ue": "ess",
+ "ordre": 1,
+ "source": "données synthétiques pour les tests de bout en bout",
+ "cartes": [
+  {
+   "id": "col-01",
+   "type": "fait",
+   "q": "Quelle couleur obtient-on en mélangeant du bleu et du jaune ?",
+   "a": "Le vert.",
+   "fiche": "ess-couleurs",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "vert",
+      "formulations": [
+       "couleur verte",
+       "du vert"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  },
+  {
+   "id": "col-02",
+   "type": "fait",
+   "q": "Quelles sont les trois couleurs primaires du peintre ?",
+   "a": "Le rouge, le jaune et le bleu.",
+   "fiche": "ess-couleurs",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "rouge",
+      "formulations": [
+       "le rouge",
+       "du rouge"
+      ],
+      "obligatoire": true
+     },
+     {
+      "id": "k2",
+      "texte": "jaune",
+      "formulations": [
+       "le jaune",
+       "du jaune"
+      ],
+      "obligatoire": true
+     },
+     {
+      "id": "k3",
+      "texte": "bleu",
+      "formulations": [
+       "le bleu",
+       "du bleu"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  },
+  {
+   "id": "col-03",
+   "type": "cloze",
+   "q": "La couleur complémentaire du rouge est le {{vert}}.",
+   "fiche": "ess-couleurs",
+   "bareme": {
+    "idees": [
+     {
+      "id": "t1",
+      "texte": "vert",
+      "formulations": [
+       "la couleur verte",
+       "du vert"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  },
+  {
+   "id": "col-04",
+   "type": "raisonnement",
+   "q": "Pourquoi un objet rouge paraît-il rouge sous une lumière blanche ?",
+   "a": "Il absorbe les autres couleurs et renvoie le rouge.",
+   "fiche": "ess-couleurs",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "absorbe les autres couleurs",
+      "formulations": [
+       "absorbe le reste de la lumière",
+       "absorbe les autres couleurs"
+      ],
+      "obligatoire": true
+     },
+     {
+      "id": "k2",
+      "texte": "renvoie le rouge",
+      "formulations": [
+       "réfléchit le rouge",
+       "diffuse le rouge"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": [
+     {
+      "si": "absorbe le rouge",
+      "sauf": "absorbe les autres",
+      "pourquoi": "Il renvoie le rouge : il ne l'absorbe pas."
+     }
+    ]
+   }
+  },
+  {
+   "id": "col-05",
+   "type": "fait",
+   "q": "Quelle couleur obtient-on en mélangeant du rouge et du blanc ?",
+   "a": "Le rose.",
+   "fiche": "ess-couleurs",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "rose",
+      "formulations": [
+       "couleur rose",
+       "du rose"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  }
+ ]
+}

@@ -9,6 +9,8 @@ const EN_AVANCE = 20;   // révisions proposées en avance quand rien n'est dû
 const RECUL_FAUX = 4;   // une carte fausse revient 4 positions plus loin (comme v1)
 
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
+// Compteur du bilan qui correspond à un verdict (même règle que noter : par la note).
+const compteurDe = verdict => { const n = noteDe(verdict); return n >= 3 ? 'justes' : n === 2 ? 'partielles' : 'fausses'; };
 const dansFiltre = (filtre, paquet) => !filtre || filtre === 'tout' || filtre === paquet;
 const etatStocke = (donnees, paquet, id) => donnees.srs?.[paquet]?.[id] ?? null;
 
@@ -138,6 +140,7 @@ export class Seance {
     this.i = 0;
     this.fichesMontrees = new Set();
     this.fichesRatees = [];
+    this.ratesParFiche = new Map();   // ficheId → réponses fausses de la séance (pour les fiches à relire)
     this.locaux = new Map();   // états calculés ici, tant que donnees.srs ne les a pas encore
     this.pauseA = this.pas();
 
@@ -237,18 +240,65 @@ export class Seance {
       { type: 'reponse', ligne },
     ];
 
-    if (note >= 3) this.justes++;
-    else if (note === 2) this.partielles++;
-    else {
-      this.fausses++;
-      const ficheId = ficheDe(this.donnees, this.carteDe(el), el.paquet);
-      if (ficheId && !this.fichesRatees.includes(ficheId)) this.fichesRatees.push(ficheId);
+    const compteur = compteurDe(verdict);
+    this[compteur]++;
+    if (compteur === 'fausses') {
+      this.compterRatee(ficheDe(this.donnees, this.carteDe(el), el.paquet), 1);
       this.file.splice(Math.min(this.i + RECUL_FAUX, this.file.length), 0, { paquet: el.paquet, carteId: el.carteId });
     }
     this.i++;
     this.faites++;
     this.dernier = Math.max(this.dernier, t);
     return { etatAvant, etatApres, ligne, ops };
+  }
+
+  // Fiches à relire : une fiche y figure tant qu'une réponse fausse de la séance s'y rattache.
+  compterRatee(ficheId, delta) {
+    if (!ficheId) return;
+    const n = Math.max(0, (this.ratesParFiche.get(ficheId) || 0) + delta);
+    this.ratesParFiche.set(ficheId, n);
+    const i = this.fichesRatees.indexOf(ficheId);
+    if (n > 0 && i < 0) this.fichesRatees.push(ficheId);
+    else if (n === 0 && i >= 0) this.fichesRatees.splice(i, 1);
+  }
+
+  // Cartes encore à faire, celle affichée comprise (0 quand la séance est finie).
+  restantes() {
+    return this.courant() ? this.file.length - this.i : 0;
+  }
+
+  // Nouvelles cartes encore à venir (celle affichée comprise) qui se rattachent à cette micro-fiche.
+  nouvellesDeFiche(ficheId) {
+    if (!ficheId) return 0;
+    const vues = new Set();
+    for (let k = this.i; k < this.file.length; k++) {
+      const el = this.file[k];
+      const cle = el.paquet + '/' + el.carteId;
+      if (vues.has(cle)) continue;
+      const carte = this.carteDe(el);
+      if (carte && !this.etatDe(el) && ficheDe(this.donnees, carte, el.paquet) === ficheId) vues.add(cle);
+    }
+    return vues.size;
+  }
+
+  // Après une contestation acceptée : la réponse notée « ancien » vaut désormais « nouveau ».
+  // Si elle n'est plus fausse, la reprise prévue plus loin est retirée (la carte ne revient pas)
+  // et sa fiche quitte les fiches à relire ; le bilan est mis à jour. Renvoie true si une reprise a été retirée.
+  corrigerVerdict(paquet, carteId, ancien, nouveau) {
+    const avant = compteurDe(ancien), apres = compteurDe(nouveau);
+    if (avant === apres) return false;
+    let retiree = false;
+    if (avant === 'fausses') {
+      const j = this.file.findIndex((el, k) => k >= this.i && el.paquet === paquet && el.carteId === carteId);
+      if (j >= 0) { this.file.splice(j, 1); retiree = true; }
+    }
+    this[avant] = Math.max(0, this[avant] - 1);
+    this[apres]++;
+    const carte = this.carteDe({ paquet, carteId });
+    const ficheId = carte ? ficheDe(this.donnees, carte, paquet) : null;
+    if (avant === 'fausses') this.compterRatee(ficheId, -1);
+    else if (apres === 'fausses') this.compterRatee(ficheId, 1);
+    return retiree;
   }
 
   // « Suivant » sans réponse : la carte part en fin de file, sans note.

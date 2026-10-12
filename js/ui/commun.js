@@ -118,15 +118,17 @@ export function libeller(btn, texte) {
 }
 
 // Bouton à confirmer par un second appui (3 s pour confirmer).
+// `confirmation` : texte, ou fonction qui le calcule au moment de l'appui.
 export function boutonConfirme(libelle, confirmation, onConfirme, options = {}) {
   let arme = null;
   const b = bouton(libelle, {
     ...options,
     onClick: () => {
       if (arme) { clearTimeout(arme); arme = null; b.classList.remove('arme'); libeller(b, libelle); onConfirme(); return; }
+      const texte = typeof confirmation === 'function' ? confirmation() : confirmation;
       b.classList.add('arme');
-      libeller(b, confirmation);
-      annoncer(confirmation);
+      libeller(b, texte);
+      annoncer(texte);
       arme = setTimeout(() => { arme = null; b.classList.remove('arme'); libeller(b, libelle); }, 3000);
     },
   });

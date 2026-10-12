@@ -477,3 +477,115 @@ test('en avance : filtre par paquet', () => {
   });
   assert.deepEqual(idsCartes(parcourir(new Seance({ donnees: d, maintenant: T, enAvance: true, filtre: 'p1' }))), ['a']);
 });
+
+// --- Méthodes publiques pour l'interface ---
+
+test('restantes : cartes encore à faire, carte affichée comprise', () => {
+  const d = donneesDe({ paquets: [paquet('p1', [carte('c1'), carte('c2'), carte('c3')])], reglages: { pauseToutes: 1 } });
+  const s = new Seance({ donnees: d, maintenant: T });
+  assert.equal(s.restantes(), 3);
+  assert.equal(s.etape().restantes, 3);
+  s.noter({ verdict: 'juste', maintenant: T + MIN, appareil: 'test' });
+  assert.equal(s.etape().type, 'pause');
+  assert.equal(s.restantes(), 2);                  // la pause ne change rien au compte
+  s.continuer();
+  s.noter({ verdict: 'faux', maintenant: T + 2 * MIN, appareil: 'test' });
+  s.continuer();
+  assert.equal(s.restantes(), 2);                  // c3, puis c2 qui revient
+  assert.equal(s.etape().restantes, s.restantes());
+  s.passer();
+  assert.equal(s.restantes(), 2);
+  parcourir(s, () => 'juste', T + 3 * MIN);
+  assert.equal(s.restantes(), 0);
+  assert.equal(new Seance({ donnees: donneesDe(), maintenant: T }).restantes(), 0);
+});
+
+test('restantes : une carte disparue des données ne compte plus quand elle arrive', () => {
+  const d = donneesDe({ paquets: [paquet('p1', [carte('a'), carte('b')])] });
+  const s = new Seance({ donnees: d, maintenant: T });
+  const d2 = structuredClone(d);
+  d2.paquets.p1.cartes = d2.paquets.p1.cartes.filter(c => c.id !== 'a');
+  delete d2.cartes.a;
+  s.majDonnees(d2);
+  assert.equal(s.restantes(), 1);
+});
+
+test('nouvellesDeFiche : nouvelles cartes à venir rattachées à la fiche', () => {
+  const d = donneesDe({
+    paquets: [
+      paquet('p1', [carte('r1', { fiche: 'fa' }), carte('n1', { fiche: 'fa' }), carte('n2', { fiche: 'fa' }), carte('n3')]),
+      paquet('p2', [carte('m1'), carte('m2', { fiche: 'fa' })]),
+    ],
+    fiches: { fa: fiche('fa'), p1: fiche('p1') },
+    srs: { p1: { r1: du() } },
+  });
+  const s = new Seance({ donnees: d, maintenant: T });
+  // r1 est une révision ; n3 se rattache à la fiche du paquet ; m1 n'a pas de fiche ; m2 se rattache à fa
+  assert.equal(s.nouvellesDeFiche('fa'), 3);
+  assert.equal(s.nouvellesDeFiche('p1'), 1);
+  assert.equal(s.nouvellesDeFiche('absente'), 0);
+  assert.equal(s.nouvellesDeFiche(null), 0);
+  s.noter({ verdict: 'juste', maintenant: T + MIN, appareil: 'test' });   // r1
+  assert.deepEqual(s.etape(), { type: 'fiche', ficheId: 'fa', paquet: 'p1' });
+  s.ficheVue();
+  s.noter({ verdict: 'faux', maintenant: T + 2 * MIN, appareil: 'test' });   // n1 : plus nouvelle, revient plus loin
+  assert.equal(s.nouvellesDeFiche('fa'), 2);
+});
+
+test('corrigerVerdict : faux contesté → la reprise disparaît, bilan et fiches à relire corrigés', () => {
+  const d = donneesDe({
+    paquets: [paquet('p1', [carte('c1', { fiche: 'fa' }), carte('c2'), carte('c3'), carte('c4'), carte('c5'), carte('c6')])],
+    fiches: { fa: fiche('fa') },
+  });
+  const s = new Seance({ donnees: d, maintenant: T });
+  s.ficheVue();
+  s.noter({ verdict: 'faux', correcteur: 'gemini', maintenant: T + MIN, appareil: 'test' });
+  assert.equal(s.restantes(), 6);
+  assert.deepEqual(s.bilan.fichesARelire, ['fa']);
+  assert.equal(s.corrigerVerdict('p1', 'c1', 'faux', 'juste'), true);
+  assert.equal(s.restantes(), 5);
+  assert.deepStrictEqual(s.bilan, { faites: 1, justes: 1, partielles: 0, fausses: 0, minutes: 1, fichesARelire: [] });
+  assert.deepEqual(idsCartes(parcourir(s, () => 'juste', T + MIN)), ['c2', 'c3', 'c4', 'c5', 'c6']);
+  assert.equal(s.bilan.justes, 6);
+});
+
+test('corrigerVerdict : partiel → juste ne touche qu\'au bilan ; même verdict : rien', () => {
+  const d = donneesDe({ paquets: [paquet('p1', [carte('a'), carte('b'), carte('c')])] });
+  const s = new Seance({ donnees: d, maintenant: T });
+  s.noter({ verdict: 'partiel', maintenant: T + MIN, appareil: 'test' });
+  assert.equal(s.corrigerVerdict('p1', 'a', 'partiel', 'partiel'), false);
+  assert.equal(s.corrigerVerdict('p1', 'a', 'partiel', 'juste'), false);
+  assert.equal(s.bilan.partielles, 0);
+  assert.equal(s.bilan.justes, 1);
+  assert.equal(s.restantes(), 2);
+  // faux → partiel : la carte ne revient pas non plus
+  s.noter({ verdict: 'faux', maintenant: T + 2 * MIN, appareil: 'test' });
+  assert.equal(s.restantes(), 2);
+  assert.equal(s.corrigerVerdict('p1', 'b', 'faux', 'partiel'), true);
+  assert.deepStrictEqual([s.bilan.justes, s.bilan.partielles, s.bilan.fausses], [1, 1, 0]);
+  assert.deepEqual(idsCartes(parcourir(s, () => 'juste', T + 2 * MIN)), ['c']);
+});
+
+test('corrigerVerdict : carte seule ratée (la reprise est la suivante) et carte ratée deux fois', () => {
+  const s = new Seance({ donnees: donneesDe({ paquets: [paquet('p1', [carte('x')])] }), maintenant: T });
+  s.noter({ verdict: 'faux', maintenant: T + MIN, appareil: 'test' });
+  assert.equal(s.etape().carte.id, 'x');
+  s.corrigerVerdict('p1', 'x', 'faux', 'juste');
+  assert.equal(s.etape().type, 'fin');
+  assert.deepStrictEqual([s.bilan.justes, s.bilan.fausses], [1, 0]);
+
+  const d = donneesDe({ paquets: [paquet('p1', [carte('a', { fiche: 'fa' }), carte('b', { fiche: 'fa' })])], fiches: { fa: fiche('fa') } });
+  const s2 = new Seance({ donnees: d, maintenant: T });
+  s2.ficheVue();
+  s2.noter({ verdict: 'faux', maintenant: T + MIN, appareil: 'test' });       // a
+  s2.noter({ verdict: 'faux', maintenant: T + 2 * MIN, appareil: 'test' });   // b
+  assert.deepEqual(s2.bilan.fichesARelire, ['fa']);
+  s2.corrigerVerdict('p1', 'b', 'faux', 'juste');
+  assert.deepEqual(s2.bilan.fichesARelire, ['fa']);   // a reste fausse : la fiche reste à relire
+  assert.equal(s2.etape().carte.id, 'a');
+  s2.noter({ verdict: 'faux', maintenant: T + 3 * MIN, appareil: 'test' });   // a, encore
+  s2.corrigerVerdict('p1', 'a', 'faux', 'juste');
+  assert.deepEqual(s2.bilan.fichesARelire, ['fa']);   // la première réponse fausse de a compte toujours
+  assert.equal(s2.etape().type, 'fin');
+  assert.deepStrictEqual([s2.bilan.faites, s2.bilan.justes, s2.bilan.fausses], [3, 2, 1]);
+});

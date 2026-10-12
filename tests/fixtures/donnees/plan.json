@@ -1,0 +1,47 @@
+{
+ "semestre": "Essai",
+ "maj": "2026-10-01",
+ "partiels": [
+  "2026-12-14",
+  "2026-12-16"
+ ],
+ "ues": [
+  {
+   "id": "ess",
+   "nom": "Essai",
+   "cours": [
+    {
+     "id": "ess-couleurs",
+     "titre": "Les couleurs",
+     "type": "CM",
+     "num": "1",
+     "date": "2026-09-28",
+     "sources": [],
+     "paquet": "ess-couleurs",
+     "fiche": "ess-couleurs"
+    },
+    {
+     "id": "ess-formes",
+     "titre": "Les formes",
+     "type": "CM",
+     "num": "2",
+     "date": "2026-09-29",
+     "sources": [],
+     "paquet": "ess-formes",
+     "fiche": null
+    },
+    {
+     "id": "ess-cm03",
+     "titre": "Les volumes",
+     "type": "CM",
+     "num": "3",
+     "date": null,
+     "sources": [],
+     "paquet": null,
+     "fiche": null
+    }
+   ]
+  }
+ ],
+ "manquant": []
+}

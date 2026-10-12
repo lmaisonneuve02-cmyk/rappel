@@ -1,0 +1,22 @@
+{
+ "nouvellesParJour": 3,
+ "objectifJour": 30,
+ "ordrePaquets": [],
+ "baremeQcm": [
+  1,
+  0.4,
+  0.1,
+  0
+ ],
+ "qcmParSeance": 3,
+ "pauseToutes": 30,
+ "modeles": {
+  "correction": "",
+  "contestation": ""
+ },
+ "voix": {
+  "vitesse": 1,
+  "silence": 0.6
+ },
+ "maj": 0
+}

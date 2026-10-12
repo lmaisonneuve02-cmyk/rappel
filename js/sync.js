@@ -4,7 +4,10 @@ import { DEPOT_DEFAUT } from './config.js';
 import { jourParis } from './temps.js';
 import { cheminUtile, analyser, serialiser, vue, cheminsTouches, appliquerOp } from './depot.js';
 
-const CLES = { depot: 'sync.depot', fichiers: 'sync.fichiers', tete: 'sync.tete', ops: 'sync.ops', derniere: 'sync.derniere' };
+const CLES = {
+  depot: 'sync.depot', fichiers: 'sync.fichiers', tete: 'sync.tete', ops: 'sync.ops', derniere: 'sync.derniere',
+  opsDepot: 'sync.opsDepot', autres: 'sync.autres', // dépôt des ops en attente ; ops en attente des autres dépôts
+};
 const ESSAIS = 5;
 const PARALLELE = 6;
 
@@ -65,7 +68,9 @@ export class Synchro extends EventTarget {
     this._objets = {};            // distant analysé : {path: objet}
     this._illisibles = new Set(); // fichiers distants abîmés
     this._tete = null;            // {commit, arbre}
-    this._ops = [];               // opérations en attente d'envoi
+    this._ops = [];               // opérations en attente d'envoi (pour this._depot)
+    this._depot = null;           // {id, racine} : le dépôt du cache et des ops en mémoire
+    this._autres = {};            // ops en attente d'autres dépôts : {id: ops}, jamais envoyées ailleurs
     this._locaux = {};            // distant + ops en attente
     this._donnees = null;
     this._derniere = 0;
@@ -88,9 +93,38 @@ export class Synchro extends EventTarget {
 
   _idDepot(c = this._cfg()) { return `${c.proprietaire}/${c.depot}@${c.branche}:${c.racine}`; }
 
+  _racine() { return this._depot?.racine ?? this._cfg().racine; }
+
+  // Dépôt, branche ou dossier changé : cache vidé (rechargement complet) et ops en attente
+  // rangées sous leur dépôt. Seulement au début d'un travail réseau. Renvoie true si changé.
+  _suivreDepot(cfg = this._cfg()) {
+    const id = this._idDepot(cfg);
+    if (this._depot?.id === id) return false;
+    const avant = this._depot ? [] : this._ops; // ajoutées avant le démarrage : pour le dépôt actuel
+    if (this._depot && this._ops.length) this._autres[this._depot.id] = this._ops;
+    this._ops = [...(this._autres[id] || []), ...avant];
+    delete this._autres[id];
+    this._depot = { id, racine: cfg.racine };
+    this._fichiers = {};
+    this._objets = {};
+    this._illisibles.clear();
+    this._tete = null;
+    this._derniere = 0;
+    this._erreur = null;
+    this._recalculer();
+    return true;
+  }
+
+  async _verifierDepot(cfg) {
+    if (!this._suivreDepot(cfg)) return;
+    await this._sauverOps();
+    this._emettreDonnees();
+    this._emettreEtat();
+  }
+
   // --- Lecture ---
   donnees() {
-    if (!this._donnees) this._donnees = vue(this._locaux, this._cfg().racine);
+    if (!this._donnees) this._donnees = vue(this._locaux, this._racine());
     return this._donnees;
   }
 
@@ -122,7 +156,7 @@ export class Synchro extends EventTarget {
 
   // --- Cache local ---
   _recalculer() {
-    const racine = this._cfg().racine;
+    const racine = this._racine();
     this._locaux = { ...this._objets };
     for (const op of this._ops) appliquerOp(this._locaux, op, racine);
     this._donnees = null;
@@ -141,7 +175,7 @@ export class Synchro extends EventTarget {
   async _sauverCache() {
     const s = this._stockage;
     await Promise.all([
-      s.ecrire(CLES.depot, this._idDepot()),
+      s.ecrire(CLES.depot, this._depot?.id ?? this._idDepot()),
       s.ecrire(CLES.fichiers, this._fichiers),
       s.ecrire(CLES.tete, this._tete),
       s.ecrire(CLES.derniere, this._derniere),
@@ -149,7 +183,12 @@ export class Synchro extends EventTarget {
   }
 
   _sauverOps() {
-    return Promise.resolve(this._stockage.ecrire(CLES.ops, this._ops.slice())).catch(() => {});
+    const s = this._stockage;
+    return Promise.all([
+      s.ecrire(CLES.ops, this._ops.slice()),
+      s.ecrire(CLES.opsDepot, this._depot?.id ?? this._idDepot()),
+      s.ecrire(CLES.autres, this._autres),
+    ]).catch(() => {});
   }
 
   // Travaux réseau un par un.
@@ -162,16 +201,22 @@ export class Synchro extends EventTarget {
   // --- Démarrage ---
   async demarrer() {
     const s = this._stockage;
-    const [depot, fichiers, tete, ops, derniere] = await Promise.all(
-      [CLES.depot, CLES.fichiers, CLES.tete, CLES.ops, CLES.derniere].map(k => Promise.resolve(s.lire(k)).catch(() => undefined)));
-    this._ops = [...(Array.isArray(ops) ? ops : []), ...this._ops];
-    if (depot === this._idDepot() && fichiers && typeof fichiers === 'object') {
+    const [depot, fichiers, tete, ops, derniere, opsDepot, autres] = await Promise.all(
+      [CLES.depot, CLES.fichiers, CLES.tete, CLES.ops, CLES.derniere, CLES.opsDepot, CLES.autres].map(k => Promise.resolve(s.lire(k)).catch(() => undefined)));
+    // Ops en attente rangées par dépôt (sans dépôt noté : celui du cache, sinon le dépôt actuel).
+    this._autres = autres && typeof autres === 'object' && !Array.isArray(autres) ? { ...autres } : {};
+    const idOps = typeof opsDepot === 'string' ? opsDepot : typeof depot === 'string' ? depot : this._idDepot();
+    if (Array.isArray(ops) && ops.length) this._autres[idOps] = [...(this._autres[idOps] || []), ...ops];
+    this._depot = null;
+    this._suivreDepot();
+    if (depot === this._depot.id && fichiers && typeof fichiers === 'object') {
       this._fichiers = fichiers;
       this._tete = tete || null;
       this._derniere = derniere || 0;
     }
     this._analyser(Object.keys(this._fichiers));
     this._recalculer();
+    await this._sauverOps();
     this._phase = this._sansJeton() ? null : 'chargement';
     this._emettreDonnees();
     this._emettreEtat();
@@ -182,7 +227,7 @@ export class Synchro extends EventTarget {
   // `ecrits` : textes que l'on vient d'écrire (inutile de les relire). Renvoie true si quelque chose a changé.
   async _charger(client, tete, ecrits = null) {
     if (this._tete?.commit === tete.commit) return false;
-    const racine = this._cfg().racine;
+    const racine = this._racine();
     const entrees = await client.arbre(tete.arbre);
     const utiles = entrees.filter(e => e.type === 'blob' && cheminUtile(e.path, racine));
     const connu = e => this._fichiers[e.path]?.sha === e.sha;
@@ -216,11 +261,13 @@ export class Synchro extends EventTarget {
   async rafraichir(raison = 'ouverture') {
     if (this._sansJeton()) { this._emettreEtat(); return this.etat; }
     await this._enFile(async () => {
+      const cfg = this._cfg();
+      await this._verifierDepot(cfg);
       this._phase = 'chargement';
       this._emettreEtat();
       let change = false;
       try {
-        const client = this._creerClient(this._cfg());
+        const client = this._creerClient(cfg);
         change = await this._charger(client, await client.tete());
         this._erreur = null;
         this._derniere = this._maintenant();
@@ -247,9 +294,10 @@ export class Synchro extends EventTarget {
   }
 
   async _envoyer() {
+    const cfg = this._cfg();
+    await this._verifierDepot(cfg); // autre dépôt : rechargement complet avant tout envoi
     if (!this._ops.length) return;
     const envoyees = this._ops.slice(); // celles ajoutées pendant l'envoi restent pour la fois suivante
-    const cfg = this._cfg();
     const racine = cfg.racine;
     this._phase = 'envoi';
     this._emettreEtat();
@@ -305,7 +353,7 @@ export class Synchro extends EventTarget {
   // --- Opérations locales ---
   ajouter(op) {
     this._ops.push(op);
-    appliquerOp(this._locaux, op, this._cfg().racine);
+    appliquerOp(this._locaux, op, this._racine());
     this._donnees = null;
     const sauve = this._sauverOps();
     this._emettreDonnees();

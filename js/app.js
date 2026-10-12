@@ -163,7 +163,7 @@ async function demarrer() {
     $('synchro-texte').textContent = etat.message || '';
     zone.dataset.mode = etat.mode;
     zone.title = etat.message || '';
-    zone.setAttribute('aria-label', `${etat.message || ''}. Ouvrir le détail dans Réglages.`);
+    zone.setAttribute('aria-label', `${etat.message || ''}. Voir le détail.`);
   }
 
   compteur.addEventListener('click', () => {
@@ -179,8 +179,32 @@ async function demarrer() {
         h('li', { text: 'Le compte repart à zéro à minuit.' })),
     });
   });
+  // Pendant une séance, une série de QCM ou le mode mains libres : une feuille, sans quitter l'écran.
+  function feuilleSynchro() {
+    const detail = h('p', { class: 'etat-synchro-detail', 'aria-live': 'polite' });
+    const envoyer = bouton('Envoyer maintenant', { onClick: async () => {
+      envoyer.disabled = true;
+      try { await sync.pousser('manuel'); } finally { envoyer.disabled = false; maj(); }
+    } });
+    const maj = () => {
+      const s = sync.etat;
+      const derniere = reglages.texteDernierEchange(s.derniereSynchro, Date.now());
+      vider(detail, h('strong', { text: s.message || '' }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
+      detail.dataset.mode = s.mode;
+      envoyer.hidden = !s.attente || s.mode === 'sans-jeton';
+      if (s.mode === 'envoi') envoyer.disabled = true;
+    };
+    maj();
+    const suivre = () => { if (detail.isConnected) maj(); else sync.removeEventListener('etat', suivre); };
+    sync.addEventListener('etat', suivre);
+    ouvrirFeuille({
+      titre: 'Enregistrement de tes réponses', classe: 'feuille--courte', actions: sync.etat.attente && sync.etat.mode !== 'sans-jeton' ? envoyer : null,
+      contenu: [detail, h('p', { class: 'aide', text: 'Tout est gardé sur l\'appareil, puis envoyé dans ton dépôt. Le détail est dans Réglages, après la séance.' })],
+    });
+  }
   $('etat-synchro').addEventListener('click', () => {
-    if (sync.etat.mode === 'sans-jeton') aller('accueil');
+    if (document.documentElement.classList.contains('plein')) feuilleSynchro();
+    else if (sync.etat.mode === 'sans-jeton') aller('accueil');
     else aller('reglages', { section: 'donnees' });
   });
 

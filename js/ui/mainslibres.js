@@ -25,7 +25,18 @@ export function creer(ctx, params = {}) {
   let fini = false;
   const arreter = boutonConfirme('Arrêter', 'Touche encore', () => ml?.arreter(), { discret: true, classe: 'btn--petit' });
   const barreHaut = h('div', { class: 'seance-haut' }, h('div', { class: 'seance-haut__in' }, arreter, position));
-  const aideCommandes = h('p', { class: 'ml-commandes' }, h('span', { class: 'ml-commandes__titre', text: 'Tu peux dire : ' }), COMMANDES.join(' · '));
+  // « je conteste » seulement avec une clé Gemini : sans elle, la commande n'a aucun effet.
+  const avecCle = !!ctx.cles().gemini;
+  const commandes = COMMANDES.filter(c => avecCle || c !== 'je conteste');
+  const aideCommandes = h('p', { class: 'ml-commandes' });
+  // Ce qu'on peut faire maintenant : micro coupé → le bouton ; sinon les mots à dire.
+  function majAide(d) {
+    const titre = t => h('span', { class: 'ml-commandes__titre', text: t });
+    if (!d.micro && ['pause', 'erreur', 'attente-geste'].includes(d.phase)) {
+      vider(aideCommandes, titre('Micro coupé : '), d.phase === 'attente-geste' ? 'touche le bouton pour répondre.' : 'touche « Reprendre ».');
+    } else vider(aideCommandes, titre('Tu peux dire : '), d.phase === 'pause' ? 'reprendre · stop' : commandes.join(' · '));
+  }
+  majAide({});
 
   // Éléments de l'écran (mis à jour à chaque état).
   const zoneEtat = h('div', { class: 'ml-etat', 'aria-live': 'polite' });
@@ -77,6 +88,7 @@ export function creer(ctx, params = {}) {
     if (d.phase === 'attente-geste') { libeller(btnPause, 'Touche pour répondre'); btnPause.querySelector('svg')?.replaceWith(icone('micro')); }
     else if (d.phase === 'pause' || d.phase === 'erreur') { libeller(btnPause, 'Reprendre'); btnPause.querySelector('svg')?.replaceWith(icone('lecture')); }
     else { libeller(btnPause, 'Pause'); btnPause.querySelector('svg')?.replaceWith(icone('pause')); }
+    majAide(d);
   }
 
   function terminer(d) {
@@ -107,7 +119,6 @@ export function creer(ctx, params = {}) {
     const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout' });
     parole = new Parole({ vitesse: Number(r.voix?.vitesse) || 1, voixNom: lireLocal(CLES.voixNom, '') });
     ecoute = new Ecoute({ silence: Math.round((Number(r.voix?.silence) || 2.5) * 1000) });
-    const avecCle = !!ctx.cles().gemini;
     ml = new MainsLibres({
       seance, parole, ecoute, fiches: donnees.fiches, appareil: ctx.appareil, maintenant: () => ctx.maintenant(),
       intro: !aideVue('mainslibres-intro'),
@@ -133,7 +144,7 @@ export function creer(ctx, params = {}) {
         h('li', null, icone('juste'), h('span', { text: 'Je corrige et je te dis le verdict.' })),
         h('li', null, icone('fiche'), h('span', { text: 'Avant de nouvelles cartes, je te laisse lire la fiche à l\'écran.' }))),
       h('p', { class: 'petit-titre', text: 'À tout moment, tu peux dire' }),
-      h('p', { class: 'ml-commandes ml-commandes--grand', text: COMMANDES.join(' · ') }),
+      h('p', { class: 'ml-commandes ml-commandes--grand', text: commandes.join(' · ') }),
       h('p', { class: 'aide', text: 'Garde l\'appli à l\'écran : elle reste allumée. Ton navigateur va demander le micro : touche « Autoriser ».' }));
     vider(barre, bouton('Démarrer', { principal: true, icone: 'micro', onClick: lancer }));
   } else {

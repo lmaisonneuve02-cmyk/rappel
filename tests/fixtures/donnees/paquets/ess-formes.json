@@ -1,0 +1,95 @@
+{
+ "id": "ess-formes",
+ "nom": "Essai · Les formes",
+ "ue": "ess",
+ "ordre": 2,
+ "source": "données synthétiques pour les tests de bout en bout",
+ "cartes": [
+  {
+   "id": "for-01",
+   "type": "fait",
+   "q": "Combien de côtés a un hexagone ?",
+   "a": "Six côtés.",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "six côtés",
+      "formulations": [
+       "6 côtés",
+       "six"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  },
+  {
+   "id": "for-02",
+   "type": "fait",
+   "q": "Comment appelle-t-on un triangle dont les trois côtés sont égaux ?",
+   "a": "Un triangle équilatéral.",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "équilatéral",
+      "formulations": [
+       "triangle équilatéral",
+       "equilateral"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": [
+     {
+      "si": "isocele",
+      "sauf": "equilateral",
+      "pourquoi": "Isocèle : seulement deux côtés égaux."
+     }
+    ]
+   }
+  },
+  {
+   "id": "for-03",
+   "type": "fait",
+   "q": "Quelle figure a tous ses points à la même distance de son centre ?",
+   "a": "Le cercle.",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "cercle",
+      "formulations": [
+       "un cercle",
+       "le cercle"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  },
+  {
+   "id": "for-04",
+   "type": "fait",
+   "q": "Combien de faces a un cube ?",
+   "a": "Six faces.",
+   "bareme": {
+    "idees": [
+     {
+      "id": "k1",
+      "texte": "six faces",
+      "formulations": [
+       "6 faces",
+       "six"
+      ],
+      "obligatoire": true
+     }
+    ],
+    "pieges": []
+   }
+  }
+ ]
+}

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MainsLibres, texteVerdict, texteQcm } from '../../js/mainslibres.js';
 import { scorer } from '../../js/qcm.js';
+import { Seance } from '../../js/seance.js';
 
 const T = Date.parse('2026-10-12T10:00:00Z');
 
@@ -210,6 +211,24 @@ test('contestation acceptée : « Pourquoi ? », raison transmise, verdict corri
   assert.ok(m.enregistres.some(o => o.ligne?.correcteur === 'contestation'));
   assert.equal(bilan.justes, 1);
   assert.equal(bilan.fausses, 0);
+});
+
+test('contestation acceptée avec une vraie séance : la carte ne revient pas', async () => {
+  const cartes = [C2, C1];
+  const donnees = {
+    paquets: { p1: { id: 'p1', nom: 'P1', cartes } }, ordre: ['p1'], fiches: {}, srs: {}, reponses: [],
+    reglages: { nouvellesParJour: 15, pauseToutes: 30 }, historique: { days: {} },
+    cartes: Object.fromEntries(cartes.map(c => [c.id, { paquet: 'p1', carte: c }])),
+  };
+  const seance = new Seance({ donnees, maintenant: T });
+  const contester = async () => ({ accepte: true, resultat: { verdict: 'juste', correcteur: 'contestation', idees_manquantes: [], erreurs: [] }, ops: [] });
+  const m = monter({ contester, script: ['la valve auriculo-ventriculaire gauche', 'je conteste', 'même sens', 'le nerf phrénique', ''] });
+  m.ml.seance = seance;
+  const bilan = await m.ml.demarrer();
+  assert.deepStrictEqual(m.corriger.appels.map(a => a.carte), ['c2', 'c1']);   // c2 ne revient pas après c1
+  assert.equal(seance.etape().type, 'fin');
+  assert.deepStrictEqual([seance.bilan.justes, seance.bilan.fausses], [2, 0]);
+  assert.deepStrictEqual([bilan.justes, bilan.fausses], [2, 0]);
 });
 
 test('contestation refusée : « Je maintiens : … »', async () => {

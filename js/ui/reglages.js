@@ -33,6 +33,13 @@ function message(zone, texte, type = 'erreur') {
     icone(type === 'ok' ? 'juste' : type === 'erreur' ? 'attention' : 'info'), h('span', { text: texte })) : null);
 }
 
+// « Dernier échange avec le dépôt : 14:05. » (avec la date si ce n'est pas aujourd'hui) ; '' si jamais.
+export function texteDernierEchange(ms, maintenant) {
+  if (!ms) return '';
+  const jour = jourParis(ms);
+  return `Dernier échange avec le dépôt : ${jour === jourParis(maintenant) ? '' : jour.split('-').reverse().slice(0, 2).join('/') + ' '}${heureParis(ms)}.`;
+}
+
 export function creer(ctx, params = {}) {
   const page = h('div', { class: 'page page--reglages' });
   let minuterie = null;
@@ -99,7 +106,7 @@ export function creer(ctx, params = {}) {
     const cles = ctx.cles();
     const zone = h('div', { class: 'zone-message', 'aria-live': 'polite' });
     const { bloc, input } = champSecret({ id: 'r-gemini', libelle: 'Clé Gemini (facultative)',
-      placeholder: cles.gemini ? 'Colle une nouvelle clé' : 'Colle la clé ici' });
+      placeholder: cles.gemini ? 'Colle une nouvelle clé' : 'AQ.…' });
     const etat = h('p', { class: 'etat-cle' });
     const retirer = boutonConfirme('Retirer', 'Retirer ? Touche encore', () => {
       ctx.definirCles({ gemini: '' }); message(zone, 'Clé retirée : la correction se fera sur ton appareil.', 'info'); maj();
@@ -267,7 +274,7 @@ export function creer(ctx, params = {}) {
     const etatTexte = h('p', { class: 'etat-synchro-detail', 'aria-live': 'polite' });
     const majEtat = () => {
       const s = ctx.sync.etat;
-      const derniere = s.derniereSynchro ? `Dernier échange avec le dépôt : ${jourParis(s.derniereSynchro) === jourParis(ctx.maintenant()) ? '' : jourParis(s.derniereSynchro).split('-').reverse().slice(0, 2).join('/') + ' '}${heureParis(s.derniereSynchro)}.` : '';
+      const derniere = texteDernierEchange(s.derniereSynchro, ctx.maintenant());
       vider(etatTexte, h('strong', { text: s.message || '' }), derniere ? h('span', { class: 'aide', text: ' ' + derniere }) : null);
       etatTexte.dataset.mode = s.mode;
     };
@@ -284,24 +291,46 @@ export function creer(ctx, params = {}) {
     const champ = (id, libelle, valeur) => h('div', { class: 'champ' }, h('label', { for: id, class: 'champ__libelle', text: libelle }),
       h('input', { id, type: 'text', class: 'champ-texte', value: valeur, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' }));
     const zoneDepot = h('div', { class: 'zone-message', 'aria-live': 'polite' });
+    // Les réponses en attente ne partent jamais dans un autre dépôt : on le dit.
+    const idDepot = d => { const c = { ...DEPOT_DEFAUT, ...(d || {}) }; const r = String(c.racine ?? ''); return `${c.proprietaire}/${c.depot}@${c.branche}:${r && !r.endsWith('/') ? r + '/' : r}`; };
+    const changerDepot = (nouveau, texte) => {
+      const n = idDepot(ctx.cles().depot) !== idDepot(nouveau) ? ctx.sync.etat.attente || 0 : 0;
+      const s = n > 1 ? 's' : '';
+      ctx.definirCles({ depot: nouveau });
+      message(zoneDepot, n ? `${texte} ${nb(n, 'réponse')} pas encore envoyée${s} reste${n > 1 ? 'nt' : ''} gardée${s} pour l'ancien dépôt : envoi quand tu y reviendras.` : texte, 'ok');
+    };
     const blocDepot = h('details', { class: 'details' }, h('summary', null, 'Avancé : dépôt'),
       champ('r-proprietaire', 'Propriétaire', depot.proprietaire), champ('r-depot', 'Dépôt', depot.depot),
       champ('r-branche', 'Branche', depot.branche), champ('r-racine', 'Dossier', depot.racine),
       h('div', { class: 'rang-boutons' },
-        bouton('Par défaut', { discret: true, onClick: () => { ctx.definirCles({ depot: null }); message(zoneDepot, 'Dépôt par défaut rétabli.', 'ok'); for (const [k, v] of Object.entries({ 'r-proprietaire': DEPOT_DEFAUT.proprietaire, 'r-depot': DEPOT_DEFAUT.depot, 'r-branche': DEPOT_DEFAUT.branche, 'r-racine': DEPOT_DEFAUT.racine })) { const el = blocDepot.querySelector('#' + k); if (el) el.value = v; } } }),
+        bouton('Par défaut', { discret: true, onClick: () => { changerDepot(null, 'Dépôt par défaut rétabli.'); for (const [k, v] of Object.entries({ 'r-proprietaire': DEPOT_DEFAUT.proprietaire, 'r-depot': DEPOT_DEFAUT.depot, 'r-branche': DEPOT_DEFAUT.branche, 'r-racine': DEPOT_DEFAUT.racine })) { const el = blocDepot.querySelector('#' + k); if (el) el.value = v; } } }),
         bouton('Enregistrer le dépôt', { classe: 'btn--plein', onClick: () => {
           const v = id => blocDepot.querySelector('#' + id).value.trim();
           const nouveau = { proprietaire: v('r-proprietaire'), depot: v('r-depot'), branche: v('r-branche') || 'main', racine: v('r-racine') };
           if (!nouveau.proprietaire || !nouveau.depot) { message(zoneDepot, 'Indique le propriétaire et le nom du dépôt.'); return; }
-          ctx.definirCles({ depot: nouveau });
-          message(zoneDepot, 'Dépôt enregistré : je recharge tes cartes.', 'ok');
+          changerDepot(nouveau, 'Dépôt enregistré : je recharge tes cartes.');
         } })),
       zoneDepot);
 
-    const attente = ctx.sync.etat.attente || 0;
-    const effacer = boutonConfirme('Effacer les données de cet appareil',
-      attente ? `Effacer ? ${nb(attente, 'réponse')} pas encore envoyée${attente > 1 ? 's' : ''} ser${attente > 1 ? 'ont' : 'a'} perdue${attente > 1 ? 's' : ''}. Touche encore.` : 'Effacer ? Rien ne sera perdu : tout est dans ton dépôt. Touche encore.',
-      () => ctx.effacerAppareil(), { classe: 'btn--danger' });
+    // Texte calculé au moment de l'appui : ce qui attend encore, et les clés à recoller.
+    const avertissement = () => {
+      const n = ctx.sync.etat.attente || 0;
+      const { jeton, gemini } = ctx.cles();
+      const cles = [jeton && 'ton jeton', gemini && 'ta clé Gemini'].filter(Boolean).join(' et ');
+      const perte = n ? `${nb(n, 'réponse')} pas encore envoyée${n > 1 ? 's' : ''} ser${n > 1 ? 'ont' : 'a'} perdue${n > 1 ? 's' : ''}` : '';
+      const recoller = cles ? `il faudra recoller ${cles}` : '';
+      const suite = [perte, recoller].filter(Boolean).join(', et ');
+      return `Effacer ? ${suite ? suite.charAt(0).toUpperCase() + suite.slice(1) + '.' : 'Tes données envoyées restent dans ton dépôt.'} Touche encore.`;
+    };
+    const effacer = boutonConfirme('Effacer les données de cet appareil', avertissement, async () => {
+      // Dernier essai d'envoi : seules les réponses qui n'ont pas pu partir sont perdues.
+      if (ctx.sync.etat.attente) {
+        effacer.disabled = true;
+        libeller(effacer, 'Envoi des réponses en attente…');
+        await ctx.sync.pousser('manuel').catch(() => {});
+      }
+      ctx.effacerAppareil();
+    }, { classe: 'btn--danger' });
 
     return {
       noeuds: [

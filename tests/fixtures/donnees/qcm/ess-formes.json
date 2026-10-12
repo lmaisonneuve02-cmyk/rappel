@@ -1,0 +1,141 @@
+{
+ "cours": "ess-formes",
+ "ue": "ess",
+ "qcm": [
+  {
+   "id": "ess-formes-q01",
+   "ue": "ess",
+   "cours": "ess-formes",
+   "source": "claude",
+   "statut": "valide",
+   "maj": 0,
+   "enonce": "À propos des polygones, quelle(s) proposition(s) est (sont) exacte(s) ?",
+   "propositions": [
+    {
+     "l": "A",
+     "t": "Un hexagone a six côtés.",
+     "vrai": true,
+     "expl": "Hexa = six."
+    },
+    {
+     "l": "B",
+     "t": "Un pentagone a six côtés.",
+     "vrai": false,
+     "expl": "Penta = cinq."
+    },
+    {
+     "l": "C",
+     "t": "Un carré a quatre côtés égaux.",
+     "vrai": true,
+     "expl": "C'est sa définition."
+    },
+    {
+     "l": "D",
+     "t": "Un triangle a quatre sommets.",
+     "vrai": false,
+     "expl": "Trois sommets."
+    },
+    {
+     "l": "E",
+     "t": "Un octogone a huit côtés.",
+     "vrai": true,
+     "expl": "Octo = huit."
+    }
+   ],
+   "verifie": true,
+   "cartes": [
+    "for-01"
+   ]
+  },
+  {
+   "id": "ess-formes-q02",
+   "ue": "ess",
+   "cours": "ess-formes",
+   "source": "claude",
+   "statut": "valide",
+   "maj": 0,
+   "enonce": "À propos des triangles, quelle(s) proposition(s) est (sont) exacte(s) ?",
+   "propositions": [
+    {
+     "l": "A",
+     "t": "Un triangle équilatéral a trois côtés égaux.",
+     "vrai": true,
+     "expl": "C'est sa définition."
+    },
+    {
+     "l": "B",
+     "t": "Un triangle isocèle a deux côtés égaux.",
+     "vrai": true,
+     "expl": "C'est sa définition."
+    },
+    {
+     "l": "C",
+     "t": "Un triangle rectangle a deux angles droits.",
+     "vrai": false,
+     "expl": "Un seul angle droit."
+    },
+    {
+     "l": "D",
+     "t": "La somme des angles d'un triangle vaut 180 degrés.",
+     "vrai": true,
+     "expl": "Toujours, dans le plan."
+    },
+    {
+     "l": "E",
+     "t": "Un triangle peut avoir quatre côtés.",
+     "vrai": false,
+     "expl": "Trois côtés, par définition."
+    }
+   ],
+   "verifie": true,
+   "cartes": [
+    "for-02"
+   ]
+  },
+  {
+   "id": "ess-formes-q03",
+   "ue": "ess",
+   "cours": "ess-formes",
+   "source": "claude",
+   "statut": "valide",
+   "maj": 0,
+   "enonce": "À propos des solides, quelle(s) proposition(s) est (sont) exacte(s) ?",
+   "propositions": [
+    {
+     "l": "A",
+     "t": "Un cube a six faces.",
+     "vrai": true,
+     "expl": "Six faces carrées."
+    },
+    {
+     "l": "B",
+     "t": "Une sphère a des arêtes.",
+     "vrai": false,
+     "expl": "Aucune arête."
+    },
+    {
+     "l": "C",
+     "t": "Un cube a huit sommets.",
+     "vrai": true,
+     "expl": "Quatre en haut, quatre en bas."
+    },
+    {
+     "l": "D",
+     "t": "Un cube a dix arêtes.",
+     "vrai": false,
+     "expl": "Douze arêtes."
+    },
+    {
+     "l": "E",
+     "t": "Une pyramide à base carrée a cinq faces.",
+     "vrai": true,
+     "expl": "Quatre triangles et un carré."
+    }
+   ],
+   "verifie": true,
+   "cartes": [
+    "for-04"
+   ]
+  }
+ ]
+}

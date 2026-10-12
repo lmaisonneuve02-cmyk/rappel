@@ -117,7 +117,7 @@ export function creer(ctx) {
   }
 
   function etape2() {
-    const { bloc, input } = champSecret({ id: 'cle-gemini', libelle: 'Clé Gemini', valeur: ctx.cles().gemini, placeholder: 'Colle la clé ici',
+    const { bloc, input } = champSecret({ id: 'cle-gemini', libelle: 'Clé Gemini', valeur: ctx.cles().gemini, placeholder: 'AQ.…',
       aide: "Elle reste sur cet appareil et ne sert qu'à parler à Google." });
     const zone = h('div', { class: 'zone-message', 'aria-live': 'polite' });
     let ok = false;
@@ -130,6 +130,8 @@ export function creer(ctx) {
       if (ok) { sansCle = false; etape = 3; afficher(); return; }
       const cle = input.value.trim();
       if (!cle) { message(zone, 'Colle d\'abord la clé dans le champ, ou touche « Plus tard ».'); input.focus(); return; }
+      // Vérifié sur place : un identifiant de projet collé par erreur donnerait un refus peu parlant.
+      if (!/^(AQ\.|AIza)/.test(cle)) { message(zone, 'Ce n\'est pas une clé Gemini : elle commence par AQ. Recopie-la depuis AI Studio.'); input.focus(); return; }
       principal.disabled = true;
       libeller(principal, 'Je vérifie…');
       try {
@@ -159,8 +161,8 @@ export function creer(ctx) {
       h('p', { class: 'chapeau', text: "Avec une clé Gemini (gratuite), ta réponse est jugée sur le sens : fautes, abréviations et dictée passent. Sans clé, ton appareil corrige en cherchant les idées clés : c'est moins fin." }),
       h('ol', { class: 'marche' },
         h('li', null, 'Touche ', h('strong', { text: 'Obtenir une clé' }), ' (compte Google).'),
-        h('li', null, 'Touche « Create API key ».'),
-        h('li', null, 'Copie la clé et colle-la ici.')),
+        h('li', null, 'Touche « Create API key ». Si on te demande un projet, choisis d\'en créer un (gratuit, sans carte bancaire).'),
+        h('li', null, 'Copie la clé (elle commence par AQ.) et colle-la ici.')),
       lienExterne('Obtenir une clé sur AI Studio', LIEN_GEMINI),
       bloc, zone);
     vider(barre, h('div', { class: 'barre-action__rang' }, plusTard, principal));

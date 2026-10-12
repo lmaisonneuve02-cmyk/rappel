@@ -50,7 +50,7 @@ function messageCommit(ops, ms) {
 
 function erreurIllisible(path, racine) {
   const nom = path.slice(racine.length);
-  return Object.assign(new Error(`Le fichier ${nom} est abîmé sur GitHub : il faut le réparer. Tes réponses restent gardées sur l'appareil.`), { code: 'illisible' });
+  return Object.assign(new Error(`Le fichier ${nom} est abîmé dans le dépôt : demande à Claude de le réparer. Tes réponses restent gardées sur l'appareil.`), { code: 'illisible' });
 }
 
 export class Synchro extends EventTarget {
@@ -80,7 +80,8 @@ export class Synchro extends EventTarget {
   // --- Configuration ---
   _cfg() {
     const c = { ...DEPOT_DEFAUT, ...(this._config() || {}) };
-    return { ...c, racine: c.racine ?? 'rappel/' };
+    const racine = String(c.racine ?? 'rappel/');
+    return { ...c, racine: racine && !racine.endsWith('/') ? racine + '/' : racine };
   }
 
   _sansJeton() { return !this._cfg().jeton; }

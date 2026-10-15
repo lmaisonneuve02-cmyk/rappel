@@ -64,8 +64,8 @@ function ficheDe(donnees, carte, paquet) {
 export function creer(ctx, params = {}) {
   const micro = !!reconnaissanceDisponible(window);
   let donnees = ctx.donnees();
-  const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance });
-  const objectifAuDepart = ctx.acquises() >= ctx.objectif();
+  const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance, nouvellesDAbord: true });
+  const objectifAuDepart = ctx.atteint();
   let objectifAnnonce = objectifAuDepart;
   const geminiPrevenu = new Set();   // codes d'erreur de Gemini déjà signalés dans cette séance
   let etat = 'debut';
@@ -176,7 +176,7 @@ export function creer(ctx, params = {}) {
     majHaut();
     vider(contenu,
       h('h1', { class: 'titre-page', tabindex: '-1', text: `${e.faites} cartes faites. Une pause ?` }),
-      h('p', { class: 'chiffres', text: `${e.minutes} min · acquises : ${ctx.acquises()}/${ctx.objectif()}` }),
+      h('p', { class: 'chiffres', text: `${e.minutes} min · nouvelles : ${ctx.acquises()}/${ctx.objectif()} · révisions : ${ctx.revisions()}` }),
       h('p', { class: 'chapeau', text: 'Ton attention baisse avant que tu la sentes baisser. Cinq minutes loin de l\'écran, puis tu reprends. Ou tu t\'arrêtes là : les cartes restantes attendront.' }));
     const continuer = () => { seance.continuer(); suivant(); };
     vider(barre, h('div', { class: 'barre-action__rang' },
@@ -306,10 +306,8 @@ export function creer(ctx, params = {}) {
   function effet(v) {
     const obj = ctx.objectif();
     const n = ctx.acquises();
-    if (n > v.avant) return `+1 acquise : ${n}/${obj}`;
-    if (v.resultat.verdict !== 'faux') return `Déjà comptée aujourd'hui : ${n}/${obj}`;
-    if (n < v.avant) return 'Elle ne compte plus pour l\'instant : réussis-la quand elle revient.';
-    return 'Ne compte pas encore : réussis-la quand elle revient.';
+    if (n > v.avant) return `+1 nouvelle : ${n}/${obj}`;
+    return `Nouvelles : ${n}/${obj} · révisions restantes : ${ctx.revisions()}`;
   }
 
   // Ajuste la séance après une contestation acceptée (la carte ratée ne doit plus revenir).
@@ -367,10 +365,10 @@ export function creer(ctx, params = {}) {
     }
     if (v.issue) notes.push(h('p', { class: ['issue', v.issue.ok ? 'issue--ok' : 'issue--non'], role: 'status' }, icone(v.issue.ok ? 'juste' : 'info'), v.issue.texte));
     let terminerIci = null;
-    if (!objectifAnnonce && ctx.acquises() >= ctx.objectif()) {
+    if (!objectifAnnonce && ctx.atteint()) {
       objectifAnnonce = true;
       terminerIci = h('button', { type: 'button', class: 'lien', text: "M'arrêter là", onclick: () => afficherFin() });
-      notes.push(bandeau(`Objectif du jour atteint : ${ctx.acquises()} cartes acquises. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
+      notes.push(bandeau(`Objectif du jour atteint : ${ctx.acquises()} nouvelles cartes et toutes les révisions. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
     }
 
     vider(contenu,

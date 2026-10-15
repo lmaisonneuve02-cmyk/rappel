@@ -77,7 +77,18 @@ export function nouvellesDuJour(donnees, maintenant) {
   return cartes.size + (Number.isFinite(v1) && v1 > 0 ? v1 : 0);
 }
 
-// Règle de déblocage : cartes dont la dernière réponse d'aujourd'hui est juste ou partielle.
+// Règle de déblocage (depuis le 15 oct. 2026) : révisions du jour encore à faire = cartes dues au plus tard
+// aujourd'hui et pas encore répondues aujourd'hui.
+export function revisionsRestantes(donnees, maintenant) {
+  const debut = debutJourParis(maintenant), fin = finJourParis(maintenant);
+  let n = 0;
+  for (const cartes of Object.values(donnees.srs || {})) {
+    for (const etat of Object.values(cartes || {})) if (etat && etat.due < fin && etat.last < debut) n++;
+  }
+  return n;
+}
+
+// Ancienne règle (jusqu'au 14 oct.) : cartes dont la dernière réponse d'aujourd'hui est juste ou partielle.
 export function acquisesDuJour(donnees, maintenant) {
   const jour = jourParis(maintenant);
   let n = 0;
@@ -126,7 +137,7 @@ function sansVide(objet) {
 
 export class Seance {
   // maintenant : ms, ou une fonction qui renvoie l'heure (horloge injectée).
-  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, rnd = Math.random }) {
+  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, nouvellesDAbord = false, rnd = Math.random }) {
     this.donnees = donnees;
     this.horloge = typeof maintenant === 'function' ? maintenant : null;
     const t0 = this.horloge ? this.horloge() : maintenant;
@@ -152,7 +163,8 @@ export class Seance {
     }
     const cle = el => this.carteDe(el)?.fiche || el.paquet;
     revisions = espacer(melanger(revisions, rnd), cle);
-    this.file = [...revisions, ...nouvellesPossibles(donnees, t0, filtre)];
+    const nouvelles = nouvellesPossibles(donnees, t0, filtre);
+    this.file = nouvellesDAbord ? [...nouvelles, ...revisions] : [...revisions, ...nouvelles];   // l'appli : nouvelles d'abord (15/10)
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.

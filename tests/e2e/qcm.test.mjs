@@ -61,7 +61,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
     await page.getByText('2 QCM ratés : ils reviendront dans 2 jours.').waitFor();
     await verifierEcran(page, 'qcm-bilan');
     await attendre(() => faux.commits().length === 2, { message: 'envoi du journal des QCM' });
-    assert.equal(await compteur(page), 'Acquises : 0/30');
+    assert.equal(await compteur(page), 'Nouvelles : 0/30 · Révisions : 2');
 
     const commit = faux.commits()[1];
     assert.match(commit.message, /^Rappel : mise à jour du \d\d\/\d\d$/);

@@ -53,7 +53,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
 
     await clic(page, 'Continuer');
     await page.getByRole('heading', { name: "C'est parti" }).waitFor();
-    await page.getByText('Objectif : 30 cartes acquises par jour. Juste ou partiel, elle compte.').waitFor();
+    await page.getByText('Objectif : 30 nouvelles cartes par jour, et toutes les révisions du jour.').waitFor();
     await verifierEcran(page, 'premiers-pas-3');
 
     await clic(page, 'Voir ma séance du jour');
@@ -61,7 +61,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
     await page.getByRole('heading', { name: 'Ta séance du jour' }).waitFor();
     await page.getByText('2 révisions · 3 nouvelles cartes').waitFor();
     assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Commencer · 5 cartes');
-    assert.equal(await compteur(page), 'Acquises : 0/30');
+    assert.equal(await compteur(page), 'Nouvelles : 0/30 · Révisions : 2');
     await page.locator('#synchro-texte', { hasText: 'Enregistré' }).waitFor();
     await verifierEcran(page, 'premiers-pas-aujourdhui');
     o.verifierConsole([/status of 401/]);

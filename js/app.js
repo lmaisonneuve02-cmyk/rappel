@@ -2,7 +2,7 @@
 import { CLES, DEPOT_DEFAUT, VERSION, OBJECTIF_DEFAUT } from './config.js';
 import { Synchro } from './sync.js';
 import { ouvrirStockage } from './stockage.js';
-import { acquisesDuJour } from './seance.js';
+import { nouvellesDuJour, revisionsRestantes } from './seance.js';
 import { creerIdf } from './texte.js';
 import { jourParis } from './temps.js';
 import { h, $, vider, icone, toast, lireLocal, ecrireLocal, lireJson, estTactile, ouvrirFeuille, bouton } from './ui/commun.js';
@@ -122,7 +122,10 @@ async function demarrer() {
       return idfMemo;
     },
     objectif: () => Number(sync.donnees().reglages?.objectifJour) || OBJECTIF_DEFAUT,
-    acquises: () => acquisesDuJour(sync.donnees(), Date.now()),
+    // Objectif du jour (règle du 15/10) : `objectifJour` nouvelles cartes ET toutes les révisions du jour.
+    acquises: () => nouvellesDuJour(sync.donnees(), Date.now()),
+    revisions: () => revisionsRestantes(sync.donnees(), Date.now()),
+    atteint: () => ctx.acquises() >= ctx.objectif() && ctx.revisions() === 0,
     aller,
     majEntete: () => majEntete(),
     appliquerTheme,
@@ -144,12 +147,13 @@ async function demarrer() {
     const sansJeton = !lireLocal(CLES.jeton);
     const objectif = ctx.objectif();
     const n = sansJeton ? 0 : ctx.acquises();
-    const atteint = n >= objectif;
-    compteurTexte.textContent = `Acquises : ${n}/${objectif}${atteint ? ' ✓' : ''}`;
+    const rev = sansJeton ? 0 : ctx.revisions();
+    const atteint = !sansJeton && n >= objectif && rev === 0;
+    compteurTexte.textContent = `Nouvelles : ${n}/${objectif}${rev ? ` · Révisions : ${rev}` : ''}${atteint ? ' ✓' : ''}`;
     compteurBarre.max = objectif;
     compteurBarre.value = Math.min(n, objectif);
     compteur.classList.toggle('compteur--atteint', atteint);
-    compteur.setAttribute('aria-label', `${n} carte${n > 1 ? 's' : ''} acquise${n > 1 ? 's' : ''} sur ${objectif} aujourd'hui. Comment on compte ?`);
+    compteur.setAttribute('aria-label', `${n} nouvelle${n > 1 ? 's' : ''} carte${n > 1 ? 's' : ''} sur ${objectif} aujourd'hui, ${rev} révision${rev > 1 ? 's' : ''} à faire. Comment on compte ?`);
     if (dernierCompte != null && n > dernierCompte) {
       compteur.classList.remove('monte');
       void compteur.offsetWidth;
@@ -181,11 +185,12 @@ async function demarrer() {
     const objectif = ctx.objectif();
     const n = ctx.acquises();
     ouvrirFeuille({
-      titre: `Acquises aujourd'hui : ${n} sur ${objectif}`, surtitre: 'Comment on compte', classe: 'feuille--courte', libelleFermer: 'Compris',
+      titre: `Aujourd'hui : ${n} nouvelles sur ${objectif}, ${ctx.revisions()} révisions à faire`, surtitre: 'Comment on compte', classe: 'feuille--courte', libelleFermer: 'Compris',
       contenu: h('ul', { class: 'liste-simple' },
-        h('li', { text: 'Une carte est acquise quand ta dernière réponse du jour est juste ou partielle.' }),
-        h('li', { text: 'Ratée puis réussie plus tard : elle compte.' }),
-        h('li', { text: 'Réussie puis ratée : elle ne compte plus, jusqu\'à ce que tu la réussisses.' }),
+        h('li', { text: `Objectif : ${objectif} nouvelles cartes (jamais vues), et toutes les révisions du jour.` }),
+        h('li', { text: 'Les nouvelles cartes viennent en premier dans la séance.' }),
+        h('li', { text: 'Une révision compte dès que tu y as répondu aujourd\'hui, juste ou pas.' }),
+        h('li', { text: 'Réviser en avance ne compte pas pour l\'objectif.' }),
         h('li', { text: 'Les QCM ne comptent pas.' }),
         h('li', { text: 'Le compte repart à zéro à minuit.' })),
     });

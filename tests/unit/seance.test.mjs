@@ -589,3 +589,17 @@ test('corrigerVerdict : carte seule ratée (la reprise est la suivante) et carte
   assert.equal(s2.etape().type, 'fin');
   assert.deepStrictEqual([s2.bilan.faites, s2.bilan.justes, s2.bilan.fausses], [3, 2, 1]);
 });
+
+test('revisionsRestantes et nouvellesDAbord (règle du 15/10)', async () => {
+  const { Seance, revisionsRestantes } = await import('../../js/seance.js');
+  const now = Date.parse('2026-10-15T20:00:00+02:00');
+  const hier = now - 86400000;
+  const donnees = {
+    paquets: { p: { id: 'p', nom: 'p', cartes: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] } }, ordre: ['p'],
+    srs: { p: { a: { last: hier - 86400000, due: hier, reps: 1, s: 1, d: 5, lapses: 0 }, b: { last: now - 3600000, due: now + 86400000, reps: 1, s: 1, d: 5, lapses: 0 } } },
+    reglages: { nouvellesParJour: 5 }, reponses: [], cartes: {},
+  };
+  assert.equal(revisionsRestantes(donnees, now), 1);
+  const s = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
+  assert.deepEqual(s.file.map(x => x.carteId), ['c', 'a']);
+});

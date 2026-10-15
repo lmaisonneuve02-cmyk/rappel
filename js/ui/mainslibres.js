@@ -117,7 +117,7 @@ export function creer(ctx, params = {}) {
     compterAide('mainslibres');
     const donnees = ctx.donnees();
     const r = ctx.reglages();
-    const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout' });
+    const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', nouvellesDAbord: true });
     parole = new Parole({ vitesse: Number(r.voix?.vitesse) || 1, voixNom: lireLocal(CLES.voixNom, '') });
     ecoute = new Ecoute({ silence: Math.round((Number(r.voix?.silence) || 2.5) * 1000) });
     ml = new MainsLibres({

@@ -164,7 +164,9 @@ export class Seance {
     const cle = el => this.carteDe(el)?.fiche || el.paquet;
     revisions = espacer(melanger(revisions, rnd), cle);
     const nouvelles = nouvellesPossibles(donnees, t0, filtre);
-    this.file = nouvellesDAbord ? [...nouvelles, ...revisions] : [...revisions, ...nouvelles];   // l'appli : nouvelles d'abord (15/10)
+    // L'appli : les nouvelles cartes de l'objectif d'abord, puis les révisions, puis les nouvelles en plus (15/10).
+    const manque = Math.max(0, nombre(donnees.reglages?.objectifJour, 30) - nouvellesDuJour(donnees, t0));
+    this.file = nouvellesDAbord ? [...nouvelles.slice(0, manque), ...revisions, ...nouvelles.slice(manque)] : [...revisions, ...nouvelles];
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.

@@ -603,3 +603,17 @@ test('revisionsRestantes et nouvellesDAbord (règle du 15/10)', async () => {
   const s = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
   assert.deepEqual(s.file.map(x => x.carteId), ['c', 'a']);
 });
+
+test('nouvellesDAbord : objectif de nouvelles atteint, les révisions passent avant les nouvelles en plus', async () => {
+  const { Seance } = await import('../../js/seance.js');
+  const now = Date.parse('2026-10-15T23:00:00+02:00');
+  const hier = now - 86400000;
+  const donnees = {
+    paquets: { p: { id: 'p', nom: 'p', cartes: [{ id: 'a' }, { id: 'c' }] } }, ordre: ['p'],
+    srs: { p: { a: { last: hier - 86400000, due: hier, reps: 1, s: 1, d: 5, lapses: 0 } } },
+    reglages: { nouvellesParJour: 64, objectifJour: 1 }, cartes: {},
+    reponses: [{ carte: 'x', nouvelle: true, ts: now - 3600000, correcteur: 'local' }],
+  };
+  const s = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
+  assert.deepEqual(s.file.map(x => x.carteId), ['a', 'c']);
+});

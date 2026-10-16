@@ -1,5 +1,5 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
-import { Seance } from '../seance.js';
+import { Seance, apportDuFiltre, revisionsEnAvance } from '../seance.js';
 import { corriger, contester } from '../correction.js';
 import { corrigerLocal } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
@@ -8,7 +8,7 @@ import { choisirQcm } from '../qcm.js';
 import { Ecoute, reconnaissanceDisponible, messageEcoute } from '../voix.js';
 import {
   h, vider, bouton, libeller, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
-  verdictNoeud, VERDICTS, BADGES, imageSvg, nb, estTactile, aideVue, compterAide, empiler, depiler, bandeau,
+  verdictNoeud, VERDICTS, BADGES, imageSvg, nb, estTactile, aideVue, compterAide, empiler, depiler, bandeau, texteEncore, texteAtteint,
 } from './commun.js';
 
 const CONSIGNES = {
@@ -372,7 +372,7 @@ export function creer(ctx, params = {}) {
     if (!objectifAnnonce && ctx.atteint()) {
       objectifAnnonce = true;
       terminerIci = h('button', { type: 'button', class: 'lien', text: "M'arrêter là", onclick: () => afficherFin() });
-      notes.push(bandeau(`Objectif du jour atteint : ${nb(ctx.cartes(), 'carte')} aujourd'hui. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
+      notes.push(bandeau(texteAtteint(ctx.jour()), { type: 'reussite', action: terminerIci }));
     }
 
     vider(contenu,
@@ -518,6 +518,11 @@ export function creer(ctx, params = {}) {
     const b = seance.bilan;
     const jour = ctx.jour();
     const { objectif: obj, cartes: n, atteint } = jour;
+    const filtre = params.filtre || 'tout';
+    // Séance sur un paquet, finie, objectif pas atteint : ce qui manque est dans les autres paquets.
+    const tout = apportDuFiltre(ctx.donnees(), ctx.maintenant(), 'tout');
+    const nTout = tout.revisions + tout.reprises + tout.nouvelles;
+    const versTout = !atteint && filtre !== 'tout' && nTout > 0;
     // La carte en cours de correction ne compte plus parmi les restantes : sa réponse est donnée.
     const restantes = interrompue ? Math.max(0, seance.restantes() - (correctionEnCours ? 1 : 0)) : 0;
     const fiches = (b.fichesARelire || []).map(id => donnees.fiches[id]).filter(Boolean);
@@ -534,7 +539,7 @@ export function creer(ctx, params = {}) {
         h('p', { class: 'grand-compteur__texte', text: "cartes aujourd'hui" }),
         h('progress', { class: 'barre barre--grande', max: String(obj), value: String(Math.min(n, obj)), 'aria-hidden': 'true' })),
       h('p', { class: 'chiffres chiffres--doux', text: detail }),
-      !atteint ? h('p', { class: 'objectif-ligne', text: `Encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''} pour l'objectif.` })
+      !atteint ? h('p', { class: 'objectif-ligne', text: `${majuscule(texteEncore(jour))} pour l'objectif.${versTout && !restantes ? ' Il en reste dans les autres paquets.' : ''}` })
         : h('p', { class: 'objectif-ligne', text: "Objectif du jour atteint. Tu peux t'arrêter là." }),
       fiches.length ? h('section', { class: 'a-relire' }, h('h2', { class: 'petit-titre', text: 'Fiches à relire' }),
         h('div', { class: 'pastilles pastilles--enveloppe' }, fiches.map(f => h('button', { type: 'button', class: 'pastille', onclick: () => ouvrirFiche(f) }, icone('fiche'), h('span', { text: titreFiche(f) }))))) : null,
@@ -543,7 +548,7 @@ export function creer(ctx, params = {}) {
 
     // Un seul bouton principal, selon la situation.
     const boutons = [];
-    const retour = () => ctx.aller('aujourdhui');
+    const retour = () => ctx.aller('aujourdhui', { filtre });
     if (restantes > 0 && !atteint) {
       boutons.push(bouton('Retour', { onClick: retour }));
       boutons.push(bouton(`Continuer · ${nb(restantes, 'carte')}`, { principal: true, attrs: { disabled: correctionEnCours }, onClick: () => {
@@ -552,9 +557,13 @@ export function creer(ctx, params = {}) {
         if (seance.etape().type === 'pause') seance.continuer();
         suivant();
       } }));
-    } else if (!atteint) {
+    } else if (versTout) {
+      // Révisions d'abord : elles sont dans les autres paquets (pas de révision en avance sur celui-ci).
+      boutons.push(bouton('Retour', { onClick: retour }));
+      boutons.push(bouton(`Continuer · Tout (${nTout})`, { principal: true, onClick: () => ctx.aller('seance', { filtre: 'tout' }) }));
+    } else if (!atteint && revisionsEnAvance(ctx.donnees(), ctx.maintenant(), filtre).length) {
       boutons.push(nQcm ? bouton(`Faire ${nQcm} QCM`, { onClick: () => ctx.aller('qcm', { demarrer: true }) }) : bouton('Retour', { onClick: retour }));
-      boutons.push(bouton('Réviser en avance', { principal: true, onClick: () => ctx.aller('seance', { filtre: params.filtre || 'tout', enAvance: true }) }));
+      boutons.push(bouton('Réviser en avance', { principal: true, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) }));
     } else if (nQcm) {
       boutons.push(bouton('Retour', { onClick: retour }));
       boutons.push(bouton(`Faire ${nQcm} QCM`, { principal: true, onClick: () => ctx.aller('qcm', { demarrer: true }) }));

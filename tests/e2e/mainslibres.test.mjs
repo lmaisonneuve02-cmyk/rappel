@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { jourParis } from '../../js/temps.js';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, CARTES, fichiersDepot, attendre, texte } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, CARTES, fichiersDepot, attendre, texte, dont } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -55,6 +55,9 @@ test('mains libres : la question est lue, la réponse dictée est corrigée, le 
     await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
     assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '1/30');
     assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste$/);
+    // Comme la fin de séance écrite : ce qui manque pour l'objectif (pas de ✓).
+    assert.equal(await texte(page.locator('.objectif-ligne')), `Encore 4 cartes${dont('1 révision')} pour l'objectif.`);
+    assert.equal(await page.locator('.grand-compteur--atteint').count(), 0);
     await verifierEcran(page, 'mains-libres-fin');
     await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
     const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${jourParis(Date.now()).slice(0, 7)}.jsonl`];

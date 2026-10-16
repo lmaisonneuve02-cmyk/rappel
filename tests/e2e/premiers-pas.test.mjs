@@ -1,7 +1,7 @@
 // Premiers pas : sans jeton → jeton d'accès vérifié → clé Gemini → « C'est parti » → Aujourd'hui.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, JETON, texte } from './harnais.mjs';
+import { demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, JETON, texte, dont } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -65,7 +65,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
     assert.equal(await page.locator('#compteur').getAttribute('aria-label'), "0 carte sur 30 aujourd'hui, 2 révisions à faire. Comment on compte\u00a0?");
     // Révisions d'abord ; pas plus exigé que ce qui reste à proposer (2 révisions + 3 nouvelles).
     await page.getByText("environ 3 min · révisions d'abord").waitFor();
-    await page.getByText('Objectif : encore 5 cartes (dont 2 révisions). Cette séance peut suffire.').waitFor();
+    await page.getByText(`Objectif : encore 5 cartes${dont('2 révisions')}. Cette séance peut suffire.`).waitFor();
     await page.locator('#synchro-texte', { hasText: 'Enregistré' }).waitFor();
     await verifierEcran(page, 'premiers-pas-aujourdhui');
 

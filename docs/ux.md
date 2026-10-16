@@ -22,8 +22,8 @@ Décision explicite de l'utilisateur ; elle remplace la règle du 15 oct. (« N 
 - **Objectif : 60 cartes par jour** (réglage `objectifJour` ; 80 après un contrôle du mercredi sous 15/20 : l'appli lit le réglage), révisions d'abord, puis des nouvelles pour compléter.
 - Une carte compte une fois, même si elle revient après une erreur ; les révisions en avance comptent ; les QCM et les contestations ne comptent pas ; le compte repart à zéro à minuit (heure de Paris).
 - Atteint quand il y a assez de cartes **et** assez de révisions (autant que l'objectif, ou toutes celles du jour s'il y en a moins), ou quand il ne reste plus rien à proposer.
-- Jamais plus exigé : au-delà, rien n'est demandé ; « Nouvelles cartes par jour » est un plafond.
-- En-tête : « Cartes : 53/60 · Révisions : 61 » (révisions restantes, omises à 0), ✓ quand c'est atteint ; touché, il ouvre « Comment on compte ».
+- Jamais plus exigé : au-delà, rien n'est demandé ; « Nouvelles cartes par jour » est un plafond. Le 16 oct., jour du changement, seul le total compte (règle notée par l'utilisateur).
+- En-tête : « Cartes : 53/60 · Révisions : 61 » (révisions restantes, omises à 0), ✓ après les cartes quand c'est atteint ; sur téléphone, « Révisions : 61 » passe sous les cartes (sinon le compteur recouvre « Rappel ») ; touché, il ouvre « Comment on compte ».
 
 ## Mots affichés
 
@@ -50,8 +50,8 @@ Tutoiement, phrases courtes, verbes d'action sur les boutons. Aucun de : FSRS, S
 - **Carte** : un seul bouton principal dont le libellé suit le champ (vide → « Voir la réponse », rempli → « Corriger ») ; « Je ne sais pas » à côté. Entrée corrige aussi (Maj+Entrée : à la ligne) ; Entrée sur un champ vide ne dévoile pas la réponse.
 - **Auto-évaluation** (« Voir la réponse ») : la note (Non / En partie / Je l'avais, touches 1-2-3) passe directement à la carte suivante, avec un message bref.
 - **Verdict** : ordre selon le verdict ; « Je conteste » à côté du badge du correcteur, seulement pour Partiel ou Faux corrigés par une machine, avec clé et réseau ; objectif atteint signalé dans le verdict, sans fenêtre.
-- **Séance** : l'en-tête (compteur, état d'envoi) reste visible ; la barre « Terminer · Carte 3 sur 64 » est dessous. Fin : un seul bouton principal selon la situation (continuer, réviser en avance, QCM, retour).
-- **Aujourd'hui** : ligne d'objectif (« Objectif : encore 13 cartes (dont 5 révisions). Cette séance peut suffire. ») ; « révisions d'abord » sous les chiffres ; pastilles sous « Un seul paquet ? », seulement si deux paquets ou plus ont des cartes ; sans rien à faire, « Réviser en avance » est le bouton principal tant que l'objectif n'est pas atteint (les révisions en avance comptent).
+- **Séance** : l'en-tête (compteur, état d'envoi) reste visible ; la barre « Terminer · Carte 3 sur 64 » est dessous. Fin : un seul bouton principal selon la situation (continuer, « Continuer · Tout (N) » après un seul paquet, réviser en avance, QCM, retour).
+- **Aujourd'hui** : ligne d'objectif (« Objectif : encore 13 cartes (dont 5 révisions). Cette séance peut suffire. ») ; « révisions d'abord » sous les chiffres ; cartes ratées qui reviennent à part (« 4 ratées à revoir », déjà comptées) ; pastilles sous « Un seul paquet ? », seulement si deux paquets ou plus ont des cartes ; un paquet qui ne peut pas apporter ce qui manque : « Ce paquet ne suffit pas : choisis « Tout ». » et « Commencer · Tout (N) » en principal ; sans rien à faire, « Réviser en avance » est le bouton principal tant que l'objectif n'est pas atteint (les révisions en avance comptent ; jamais une carte déjà répondue aujourd'hui).
 - **QCM** : « ils ne comptent pas dans tes cartes du jour » ; liste des cours repliée sous « Choisir un cours » ; série en plein écran ; « Valider » toujours actif (une réponse vide se note par erreurs).
 - **État d'envoi** : le message de la synchro est affiché tel quel, avec un point de couleur ; une erreur qui demande d'agir ajoute un bandeau sur Aujourd'hui avec « Ouvrir Réglages ».
 - **Réglages** : section « Apparence » (thème de l'appareil) et « Revoir les aides de découverte ».

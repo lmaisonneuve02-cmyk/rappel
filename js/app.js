@@ -150,7 +150,9 @@ async function demarrer() {
     const n = j ? j.cartes : 0;
     const rev = j ? j.revisionsRestantes : 0;
     const atteint = !!j?.atteint;
-    compteurTexte.textContent = `Cartes : ${n}/${objectif}${rev ? ` · Révisions : ${rev}` : ''}${atteint ? ' ✓' : ''}`;
+    // « Cartes : n/objectif ✓ · Révisions : r » ; sur téléphone, les révisions passent sous les cartes.
+    vider(compteurTexte, h('span', { text: `Cartes : ${n}/${objectif}${atteint ? ' ✓' : ''}` }),
+      rev ? [h('span', { class: 'compteur__sep', text: ' · ' }), h('span', { class: 'compteur__rev', text: `Révisions : ${rev}` })] : null);
     compteurBarre.max = objectif;
     compteurBarre.value = Math.min(n, objectif);
     compteur.classList.toggle('compteur--atteint', atteint);

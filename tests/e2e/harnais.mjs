@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { creerFauxGitHub } from '../fixtures/faux-github.mjs';
 import { DEPOT_DEFAUT } from '../../js/config.js';
+import { JOURS_TOTAL_SEUL } from '../../js/seance.js';
+import { jourParis } from '../../js/temps.js';
 
 // Requêtes du service worker visibles par context.route (polices, fichiers de l'appli).
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= '1';
@@ -257,6 +259,9 @@ export const texte = async cible => (await cible.textContent())?.replace(/\u00a0
 
 // Texte de l'en-tête « Cartes : X/30 · Révisions : R ».
 export const compteur = page => texte(page.locator('#compteur-texte'));
+
+// « (dont 2 révisions) » dans la ligne d'objectif, sauf le 16 oct. 2026 (ce jour-là, seul le total compte).
+export const dont = revisions => (JOURS_TOTAL_SEUL.has(jourParis(Date.now())) ? '' : ` (dont ${revisions})`);
 
 // Fichiers du faux dépôt (JSON / JSONL analysés).
 export function fichiersDepot(faux) {

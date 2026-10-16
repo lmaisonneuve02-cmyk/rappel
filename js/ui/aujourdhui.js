@@ -1,10 +1,10 @@
 // Aujourd'hui : ta séance du jour (révisions puis nouvelles cartes), un seul grand bouton.
-import { aReviser, nouvellesPossibles, nouvellesDuJour } from '../seance.js';
+import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour } from '../seance.js';
 import { qcmProposables } from '../qcm.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
 import { reconnaissanceDisponible } from '../voix.js';
-import { h, vider, bouton, icone, bandeau, pastilles, nb, dateFr, aideVue } from './commun.js';
+import { h, vider, bouton, icone, bandeau, pastilles, nb, dateFr, aideVue, texteEncore, texteAtteint } from './commun.js';
 
 const MIN_PAR_CARTE = 0.6;
 let filtreMemo = { jour: '', filtre: 'tout' };   // le choix d'un paquet vaut jusqu'à minuit
@@ -15,22 +15,17 @@ function mainsLibresPossible() {
   return !!reconnaissanceDisponible(window) && 'speechSynthesis' in window;
 }
 
-// Ce que propose la journée, pour un filtre donné.
+// Ce que propose la journée, pour un filtre donné : révisions (pas encore répondues aujourd'hui),
+// cartes ratées qui reviennent (déjà comptées) et nouvelles cartes.
 function resume(d, now, filtre) {
-  const revisions = aReviser(d, now, filtre).length;
-  const nouvelles = nouvellesPossibles(d, now, filtre).length;
-  return { revisions, nouvelles, total: revisions + nouvelles };
+  const { revisions, reprises, nouvelles } = apportDuFiltre(d, now, filtre);
+  return { revisions, reprises, nouvelles, total: revisions + reprises + nouvelles };
 }
 
 function cartesRestantesJamaisVues(d) {
   let n = 0;
   for (const [id, p] of Object.entries(d.paquets)) for (const c of p.cartes || []) if (c && !d.srs[id]?.[c.id]) n++;
   return n;
-}
-
-// Ce qui manque pour l'objectif : « encore 12 cartes (dont 5 révisions) ».
-function encore(jour) {
-  return `encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''}`;
 }
 
 function demain(d, now) {
@@ -40,7 +35,9 @@ function demain(d, now) {
   return n;
 }
 
-export function creer(ctx) {
+export function creer(ctx, params = {}) {
+  // Retour d'une séance : son filtre devient celui de l'écran (« Tout » après une séance sur tout).
+  if (params.filtre) filtreMemo = { jour: jourParis(ctx.maintenant()), filtre: params.filtre };
   const page = h('div', { class: 'page page--aujourdhui' });
   const barre = h('div', { class: 'barre-action' });
   const noeud = h('div', { class: 'aujourdhui' }, page, barre);
@@ -63,9 +60,9 @@ export function creer(ctx) {
     const aDesCartes = Object.keys(d.paquets).length > 0;
     const filtre = filtreDuJour(d, now);
     const r = aDesCartes ? resume(d, now, filtre) : null;
+    const total = filtre === 'tout' ? r : aDesCartes ? resume(d, now, 'tout') : null;
     const jour = ctx.jour();   // objectif du jour : cartes, révisions faites et restantes, atteint
-    const objectif = jour.objectif;
-    const sig = JSON.stringify([!!cles.jeton, aDesCartes, r, filtre, jour, etat.mode, etat.code, lent, d.ordre.length, ctx.enLigne()]);
+    const sig = JSON.stringify([!!cles.jeton, aDesCartes, r, total, filtre, jour, etat.mode, etat.code, lent, d.ordre.length, ctx.enLigne()]);
     if (!force && sig === signature) return;
     signature = sig;
     actionEntree = null;
@@ -109,33 +106,35 @@ export function creer(ctx) {
     } else if (etat.mode === 'erreur' && etat.code === 'illisible') {
       blocs.push(bandeau('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.', { type: 'erreur' }));
     }
-    if (jour.atteint) {
-      blocs.push(bandeau(jour.cartes >= objectif ? `${nb(jour.cartes, 'carte')} aujourd'hui : objectif du jour atteint. Tu peux t'arrêter ou continuer.`
-        : "Plus rien à proposer aujourd'hui : objectif du jour atteint.", { type: 'reussite' }));
-    }
+    if (jour.atteint) blocs.push(bandeau(texteAtteint(jour), { type: 'reussite' }));
 
     const paquetNom = filtre === 'tout' ? null : (d.paquets[filtre]?.nom || filtre);
     const enLigne = ctx.enLigne() && etat.mode !== 'hors-ligne';
+    // Ce paquet suffit-il pour l'objectif ? (les cartes ratées qui reviennent sont déjà comptées)
+    // Sinon, révisions d'abord : elles sont dans les autres paquets, « Tout » devient l'action principale.
+    const suffit = r.revisions >= jour.encoreRevisions && r.revisions + r.nouvelles >= jour.encore;
+    const versTout = !jour.atteint && !!paquetNom && !suffit && total.total > r.total;
+    const avance = !versTout && r.total === 0 && revisionsEnAvance(d, now, filtre).length > 0;
 
     if (r.total > 0) {
       const minutes = Math.max(1, Math.round(r.total * MIN_PAR_CARTE));
-      const chiffres = [r.revisions ? nb(r.revisions, 'révision') : null, r.nouvelles ? nb(r.nouvelles, 'nouvelle carte', 'nouvelles cartes') : null].filter(Boolean).join(' · ');
+      const chiffres = [r.revisions && nb(r.revisions, 'révision'), r.reprises && nb(r.reprises, 'ratée à revoir', 'ratées à revoir'),
+        r.nouvelles && nb(r.nouvelles, 'nouvelle carte', 'nouvelles cartes')].filter(Boolean).join(' · ');
       blocs.push(h('section', { class: 'bloc-seance' },
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
         h('p', { class: 'chiffres', text: chiffres }),
-        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${r.revisions && r.nouvelles ? ' · révisions d\'abord' : ''}` }),
-        !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${encore(jour)}. ` }),
-          r.total >= jour.encore && r.revisions >= jour.encoreRevisions ? 'Cette séance peut suffire.' : 'Fais toute la séance.') : null));
+        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${(r.revisions || r.reprises) && r.nouvelles ? ' · révisions d\'abord' : ''}` }),
+        !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${texteEncore(jour)}. ` }),
+          suffit ? 'Cette séance peut suffire.' : versTout ? 'Ce paquet ne suffit pas : choisis « Tout ».' : 'Fais toute la séance.') : null));
     } else {
-      const total = resume(d, now, 'tout');
       const prochaines = demain(d, now);
       blocs.push(h('section', { class: 'bloc-seance' },
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page titre-page--icone' }, icone('juste', { classe: 'icone--reussite' }), h('span', { text: paquetNom ? 'Rien à faire dans ce paquet' : "Tout est fait pour aujourd'hui" })),
         paquetNom && total.total ? h('p', { class: 'chapeau', text: `Il reste ${nb(total.total, 'carte')} dans les autres paquets.` }) : null,
-        !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${encore(jour)}. ` }),
-          paquetNom ? 'Choisis « Tout » pour continuer.' : 'Révise en avance pour compléter.') : null,
+        !jour.atteint && (versTout || avance) ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${texteEncore(jour)}. ` }),
+          versTout ? 'Choisis « Tout » pour continuer.' : 'Révise en avance pour compléter.') : null,
         prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
     }
 
@@ -167,8 +166,7 @@ export function creer(ctx) {
       if (n > 0 || id === filtre) options.push({ id, libelle: d.paquets[id]?.nom || id, n });
     }
     if (options.length >= 2 || filtre !== 'tout') {
-      const tout = resume(d, now, 'tout').total;
-      const groupe = pastilles([{ id: 'tout', libelle: 'Tout', n: tout }, ...options], filtre, id => {
+      const groupe = pastilles([{ id: 'tout', libelle: 'Tout', n: total.total }, ...options], filtre, id => {
         filtreMemo = { jour: jourParis(ctx.maintenant()), filtre: id };
         afficher(true);
       }, { etiquette: 'Choisir un paquet' });
@@ -190,15 +188,23 @@ export function creer(ctx) {
 
     // Zone du pouce : une seule action principale.
     const qcm = qcmProposables(d).length > 0;
-    if (r.total > 0) {
+    const faireQcm = principal => (qcm ? bouton('Faire des QCM', { principal, onClick: () => ctx.aller('qcm') }) : null);
+    if (versTout) {
+      // L'objectif attend des cartes des autres paquets : « Tout » en principal, ce paquet reste possible.
+      actionEntree = () => { filtreMemo = { jour: jourParis(ctx.maintenant()), filtre: 'tout' }; ctx.aller('seance', { filtre: 'tout' }); };
+      vider(barre, h('div', { class: 'barre-action__rang' },
+        r.total > 0 ? bouton(`Ce paquet (${r.total})`, { onClick: () => ctx.aller('seance', { filtre }) }) : faireQcm(false),
+        bouton(`Commencer · Tout (${total.total})`, { principal: true, onClick: actionEntree })));
+    } else if (r.total > 0) {
       const libelle = paquetNom ? `Commencer · ${paquetNom} (${r.total})` : `Commencer · ${nb(r.total, 'carte')}`;
       actionEntree = () => ctx.aller('seance', { filtre });
       vider(barre, bouton(libelle, { principal: true, onClick: actionEntree }));
     } else {
       // Objectif atteint : rien n'est exigé de plus, les QCM passent devant.
-      const enAvance = bouton('Réviser en avance', { principal: !jour.atteint || !qcm, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) });
-      const faireQcm = qcm ? bouton('Faire des QCM', { principal: jour.atteint, onClick: () => ctx.aller('qcm') }) : null;
-      vider(barre, h('div', { class: 'barre-action__rang' }, jour.atteint ? [enAvance, faireQcm] : [faireQcm, enAvance]));
+      // « Réviser en avance » seulement s'il reste des cartes pas encore répondues aujourd'hui.
+      const enAvance = avance ? bouton('Réviser en avance', { principal: !jour.atteint || !qcm, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) }) : null;
+      const qcmBouton = faireQcm(jour.atteint || !avance);
+      vider(barre, h('div', { class: 'barre-action__rang' }, jour.atteint ? [enAvance, qcmBouton] : [qcmBouton, enAvance]));
     }
   }
 

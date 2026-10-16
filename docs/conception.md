@@ -15,7 +15,9 @@ Document de référence pour construire l'appli. Chaque module a un contrat pré
   - on compte les cartes distinctes répondues dans la journée de Paris (0 h – 23 h 59) : nouvelles et révisions, révisions en avance comprises ; une carte ratée qui revient à +10 min compte une fois ; contestations et QCM exclus ;
   - **révisions d'abord** : la séance sert toutes les révisions dues, puis les nouvelles cartes pour compléter (jamais « nouvelles d'abord ») ;
   - atteint si cartes ≥ objectif **et** révisions faites ≥ min(objectif, révisions faites + révisions restantes), **ou** s'il ne reste plus rien à proposer (aucune révision restante et aucune nouvelle carte possible). Révisions faites = cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'a `nouvelle: true`) ; révisions restantes = cartes dues avant la fin du jour et pas encore répondues aujourd'hui ;
-  - jamais plus exigé : au-delà, il peut continuer ; les nouvelles cartes sont proposées jusqu'à `nouvellesParJour` (un plafond, pas un objectif).
+  - jamais plus exigé : au-delà, il peut continuer ; les nouvelles cartes sont proposées jusqu'à `nouvellesParJour` (un plafond, pas un objectif) ;
+  - le 16 oct. 2026, jour du changement, seul le total compte (règle notée par l'utilisateur : Rappel 2 lui avait servi les nouvelles cartes en premier) : `JOURS_TOTAL_SEUL` dans `seance.js` ;
+  - une carte ratée qui revient dans la journée est déjà comptée : « Réviser en avance » ne propose que des cartes pas encore répondues aujourd'hui, et un seul paquet (pastille) ne « suffit » que s'il apporte les révisions qui manquent ; sinon l'appli renvoie vers « Tout ».
 
 ## 1. Arborescence du dépôt `rappel` (public)
 
@@ -286,6 +288,8 @@ export function revisionsRestantes(donnees, maintenant)   // nb d'états avec du
 export function objectifDuJour(donnees, maintenant, objectif)   // {objectif, cartes, revisionsFaites, revisionsRestantes, atteint, encore, encoreRevisions} — l'objectif du jour (§ 0)
 export function aReviser(donnees, maintenant, filtre)  // [{paquet, carteId}] disponibles (estDisponible), filtre = 'tout' | paquetId
 export function nouvellesPossibles(donnees, maintenant, filtre)  // [{paquet, carteId}] sans état, dans l'ordre donnees.ordre puis l'ordre du fichier, limitées à max(0, nouvellesParJour - nouvellesDuJour)
+export function apportDuFiltre(donnees, maintenant, filtre)   // {revisions, reprises, nouvelles} : révisions pas encore répondues aujourd'hui, cartes ratées qui reviennent (déjà comptées), nouvelles possibles
+export function revisionsEnAvance(donnees, maintenant, filtre, n = 20)   // « Réviser en avance » : les n échéances les plus proches, sans les cartes répondues aujourd'hui
 export class Seance {
   constructor({donnees, maintenant, filtre = 'tout', enAvance = false, rnd = Math.random})
   // file : révisions mélangées (en évitant deux cartes de la même fiche à la suite), puis nouvelles cartes paquet par paquet (révisions d'abord, toujours)
@@ -365,7 +369,7 @@ Déroulé d'une carte : dire la question (`texteOral`) → écouter → si comma
 ### Coquille (`index.html`, `js/app.js`, `js/ui/commun.js`)
 - En-tête collant : nom « Rappel », **compteur « Cartes : X/60 · Révisions : R »** (R = révisions restantes, omis à 0 ; barre fine qui se remplit ; objectif atteint : ✓ et couleur de réussite ; touché : feuille « Comment on compte »), état de synchro en mots courts (« Enregistré », « 3 réponses en attente d'envoi », « Hors ligne : tout est gardé sur l'appareil », « Sans lien avec tes données »), cliquable → détail dans Réglages.
 - Barre d'onglets en bas (4) : **Aujourd'hui**, **QCM**, **Suivi**, **Réglages**. Pendant une séance, la barre d'onglets est masquée (plein écran, bouton « Terminer » en haut).
-- `commun.js` exporte : `h(tag, attrs, ...enfants)` (attrs : `class`, `text`, `on<Evenement>`, `aria-*`, `data-*`, `hidden`, `disabled`, `value`, `type`, `for`, `id`, `role`, `tabindex`, `placeholder`, `href`, `target`, `rel`, `src`, `alt`, `title`, `name`, `checked`, `min`, `max`, `step` ; enfants : chaînes → nœuds texte, null/false ignorés, tableaux aplatis), `$(id)`, `toast(message)`, `bouton(libelle, {principal, discret, onClick, icone})`, `ficheNoeud(fiche)`, `ouvrirFiche(fiche)` (surimpression plein écran, fermeture par bouton et Échap), `verdictNoeud(resultat)`, `pastilles(options, actif, onChoix)`, `icone(nom)` (SVG construits par `document.createElementNS`, pas de chaîne HTML).
+- `commun.js` exporte : `h(tag, attrs, ...enfants)` (attrs : `class`, `text`, `on<Evenement>`, `aria-*`, `data-*`, `hidden`, `disabled`, `value`, `type`, `for`, `id`, `role`, `tabindex`, `placeholder`, `href`, `target`, `rel`, `src`, `alt`, `title`, `name`, `checked`, `min`, `max`, `step` ; enfants : chaînes → nœuds texte, null/false ignorés, tableaux aplatis), `$(id)`, `toast(message)`, `bouton(libelle, {principal, discret, onClick, icone})`, `ficheNoeud(fiche)`, `ouvrirFiche(fiche)` (surimpression plein écran, fermeture par bouton et Échap), `verdictNoeud(resultat)`, `pastilles(options, actif, onChoix)`, `texteEncore(jour)` / `texteAtteint(jour)` (phrases de l'objectif, mêmes sur tous les écrans), `icone(nom)` (SVG construits par `document.createElementNS`, pas de chaîne HTML).
 - Contexte partagé passé à chaque écran : `ctx = {sync, donnees(), reglages(), cles(), aller(vue, params), toast, appareil, maintenant(), idf(), objectif(), jour(), cartes(), atteint()}` (`jour()` = `objectifDuJour`, voir § 0).
 
 ### Premiers pas (`ui/accueil.js`) — si aucun jeton enregistré
@@ -377,10 +381,11 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 
 ### Aujourd'hui (`ui/aujourdhui.js`)
 - Bloc principal : « Ta séance du jour » ; chiffres « X révisions · Y nouvelles cartes · environ Z min » (Z ≈ 0,6 min par carte) ; **grand bouton « Commencer »** ; dessous, bouton secondaire « Mains libres » (icône casque) avec une ligne d'explication (« Je lis les questions, tu réponds à voix haute »), masqué si la reconnaissance vocale manque (remplacé par une note sur le micro du clavier).
-- Pastilles des paquets (défilement horizontal) : « Tout » + un paquet par pastille avec son nombre de cartes du jour.
-- Rien à faire : « Tout est fait pour aujourd'hui » + boutons « Faire des QCM » et « Réviser en avance ».
+- Chiffres : « 61 révisions · 4 ratées à revoir · 30 nouvelles cartes » (les ratées à revoir sont déjà comptées ; l'en-tête affiche les mêmes révisions).
+- Pastilles des paquets (défilement horizontal) : « Tout » + un paquet par pastille avec son nombre de cartes du jour. Si le paquet choisi ne peut pas apporter ce qui manque (révisions d'abord : elles sont ailleurs), la ligne d'objectif dit « Ce paquet ne suffit pas : choisis « Tout ». » et le bouton principal devient « Commencer · Tout (N) », à côté de « Ce paquet (n) ».
+- Rien à faire : « Tout est fait pour aujourd'hui » + boutons « Faire des QCM » et « Réviser en avance » (seulement s'il reste des cartes pas encore répondues aujourd'hui).
 - Ligne d'objectif : « Objectif : encore 12 cartes (dont 5 révisions). Cette séance peut suffire. » (jamais plus que ce qui reste à proposer).
-- Objectif atteint : bandeau de réussite (« 60 cartes aujourd'hui : objectif du jour atteint. Tu peux t'arrêter ou continuer. »).
+- Objectif atteint : bandeau de réussite, même phrase qu'en séance (« Objectif du jour atteint : 60 cartes aujourd'hui. Tu peux t'arrêter ou continuer. » ; s'il ne reste rien à compter : « Objectif du jour atteint : toutes tes cartes du jour sont faites. Tu peux t'arrêter ou continuer. »).
 
 ### Séance (`ui/seance.js`)
 - Haut : barre de progression fine, « Carte 3 sur 64 », bouton « Terminer » (deux appuis pour confirmer).
@@ -389,7 +394,7 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 - Pendant la correction : « Correction… » (indicateur), pas plus de 15 s.
 - Verdict : bandeau coloré avec icône (Juste / Partiel / Faux), « revient dans 4 jours », listes « Ce que tu as dit de juste », « Ce qui manquait », « Erreur » ; explication ; « Réponse attendue » ; lien « Voir la fiche : <titre> » ; badge du correcteur (« Corrigé par Gemini », « Corrigé sur l'appareil », « Corrigé hors ligne », « Reconnu (déjà accepté) ») ; **bouton principal « Suivant »** (Entrée) ; lien discret « Je conteste » en bas → zone « Dis pourquoi (facultatif) » + micro + « Envoyer » → second avis → message « Tu avais raison : verdict corrigé » ou l'explication.
 - Pause à 30 cartes faites (comme v1) ; objectif du jour atteint : message de réussite une fois. Chaque verdict dit son effet (« +1 carte : 18/60 », « Déjà comptée aujourd'hui : 18/60 »).
-- Fin : bilan (réponses, justes, durée), fiches à relire, bouton « Faire N QCM » si des QCM sont proposables, sinon « Retour ». Envoi des données à la fin.
+- Fin : bilan (réponses, justes, durée), fiches à relire, bouton « Faire N QCM » si des QCM sont proposables, sinon « Retour ». Séance sur un paquet finie, objectif pas atteint : « Continuer · Tout (N) » en principal. Envoi des données à la fin. Mains libres : même compteur (✓) et même ligne d'objectif.
 
 ### QCM (`ui/qcm.js`)
 - Accueil QCM : « Mélange des cours vus » (n = `qcmParSeance`) en principal ; liste des cours avec nombre de QCM, moyenne, bouton « Générer 5 QCM » (si clé Gemini ; explication : « à partir de tes cartes et de la fiche, vérifiés par un second passage »).

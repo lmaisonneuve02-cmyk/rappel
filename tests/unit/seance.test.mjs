@@ -1,7 +1,10 @@
 // Séance : compteurs du jour, file (révisions puis nouvelles), fiche, pause, notes, bilan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, Seance } from '../../js/seance.js';
+import {
+  nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
+  JOURS_TOTAL_SEUL, Seance,
+} from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
 
@@ -604,18 +607,18 @@ test('corrigerVerdict : carte seule ratée (la reprise est la suivante) et carte
 // --- Objectif du jour (règle du 16/10) ---
 
 // n révisions dues (r0…), n nouvelles cartes (n0…) ; faites : lignes du jour.
-function journee({ dues = 0, nouvellesCartes = 0, revisionsFaites = 0, nouvellesFaites = 0, objectif = 60, plafond = 60 }) {
+function journee({ dues = 0, nouvellesCartes = 0, revisionsFaites = 0, nouvellesFaites = 0, objectif = 60, plafond = 60, t = T }) {
   const cartes = [], srs = {}, reponses = [];
-  for (let i = 0; i < dues; i++) { cartes.push(carte(`r${i}`)); srs[`r${i}`] = du(i); }
+  for (let i = 0; i < dues; i++) { cartes.push(carte(`r${i}`)); srs[`r${i}`] = etat(t - 4 * JOUR - i, t - HEURE - i); }
   for (let i = 0; i < revisionsFaites; i++) {
     cartes.push(carte(`f${i}`));
-    srs[`f${i}`] = etat(T - MIN, T + 3 * JOUR);
-    reponses.push(ligne(`f${i}`, T - MIN, { nouvelle: false }));
+    srs[`f${i}`] = etat(t - MIN, t + 3 * JOUR);
+    reponses.push(ligne(`f${i}`, t - MIN, { nouvelle: false }));
   }
   for (let i = 0; i < nouvellesFaites; i++) {
     cartes.push(carte(`v${i}`));
-    srs[`v${i}`] = etat(T - MIN, T + JOUR);
-    reponses.push(ligne(`v${i}`, T - MIN));
+    srs[`v${i}`] = etat(t - MIN, t + JOUR);
+    reponses.push(ligne(`v${i}`, t - MIN));
   }
   for (let i = 0; i < nouvellesCartes; i++) cartes.push(carte(`n${i}`));
   return donneesDe({ paquets: [paquet('p1', cartes)], srs: { p1: srs }, reponses, reglages: { nouvellesParJour: plafond, objectifJour: objectif } });
@@ -670,6 +673,70 @@ test('objectifDuJour : données réelles du 16 oct. (53 cartes dont 30 nouvelles
   const o = objectifDuJour(d, T, 60);
   assert.deepEqual([o.cartes, o.revisionsFaites, o.revisionsRestantes, o.atteint], [53, 23, 61, false]);
   assert.deepEqual([o.encore, o.encoreRevisions], [37, 37]);   // 60 révisions dans la journée
+});
+
+test('objectifDuJour : le 16 oct. 2026, jour du changement de règle, seul le total compte', () => {
+  const t16 = Date.parse('2026-10-16T20:00:00+02:00');
+  assert.ok(JOURS_TOTAL_SEUL.has('2026-10-16'));
+  // journal réel du 16 : 53 cartes dont 30 nouvelles, 61 révisions restantes → encore 7 cartes, aucune révision exigée
+  const d = journee({ dues: 61, nouvellesCartes: 40, revisionsFaites: 23, nouvellesFaites: 30, t: t16 });
+  assert.deepEqual(['cartes', 'atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(d, t16, 60)[k]), [53, false, 7, 0]);
+  const d60 = journee({ dues: 61, nouvellesCartes: 40, revisionsFaites: 30, nouvellesFaites: 30, t: t16 });
+  assert.equal(objectifDuJour(d60, t16, 60).atteint, true);
+  // le lendemain, la règle complète s'applique
+  const t17 = t16 + JOUR;
+  const d17 = journee({ dues: 61, nouvellesCartes: 40, revisionsFaites: 30, nouvellesFaites: 30, t: t17 });
+  assert.deepEqual(['atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(d17, t17, 60)[k]), [false, 30, 30]);
+});
+
+test('apportDuFiltre : révisions qui comptent encore, cartes ratées qui reviennent (déjà comptées), nouvelles', () => {
+  // p1 : une révision due, une carte ratée aujourd'hui revenue à +10 min, une nouvelle ; p2 : deux révisions dues
+  const d = donneesDe({
+    paquets: [paquet('p1', [carte('a'), carte('b'), carte('c')]), paquet('p2', [carte('x'), carte('y')])],
+    srs: { p1: { a: du(), b: etat(T - 20 * MIN, T - 10 * MIN) }, p2: { x: du(1), y: du(2) } },
+    reponses: [ligne('b', T - 20 * MIN, { verdict: 'faux', note: 1, nouvelle: false })],
+    reglages: { nouvellesParJour: 5 },
+  });
+  assert.equal(aReviser(d, T, 'p1').length, 2);
+  assert.deepEqual(apportDuFiltre(d, T, 'p1'), { revisions: 1, reprises: 1, nouvelles: 1 });
+  assert.deepEqual(apportDuFiltre(d, T, 'p2'), { revisions: 2, reprises: 0, nouvelles: 0 });
+  assert.deepEqual(apportDuFiltre(d, T), { revisions: 3, reprises: 1, nouvelles: 1 });
+  // l'en-tête compte les mêmes révisions (sans la reprise)
+  assert.equal(revisionsRestantes(d, T), 3);
+});
+
+test('revisionsEnAvance : jamais une carte déjà répondue aujourd\'hui', () => {
+  const d = donneesDe({
+    paquets: [paquet('p1', [carte('a'), carte('b'), carte('c')])],
+    // a et b répondues aujourd'hui (dues demain), c revue hier (due dans 3 jours)
+    srs: { p1: { a: etat(T - HEURE, T + JOUR), b: etat(T - 2 * HEURE, T + JOUR), c: futur(3) } },
+    reglages: { nouvellesParJour: 0 },
+  });
+  assert.deepEqual(revisionsEnAvance(d, T).map(x => x.carteId), ['c']);
+  const s = new Seance({ donnees: d, maintenant: T, enAvance: true });
+  assert.equal(s.enAvance, true);
+  assert.deepEqual(idsCartes(parcourir(s)), ['c']);
+  // tout a été répondu aujourd'hui : rien en avance
+  d.srs.p1.c = etat(T - MIN, T + 2 * JOUR);
+  assert.deepEqual(revisionsEnAvance(d, T), []);
+  const vide = new Seance({ donnees: d, maintenant: T, enAvance: true });
+  assert.equal(vide.enAvance, false);
+  assert.equal(vide.etape().type, 'fin');
+});
+
+test('objectifDuJour : un paquet qui n\'a que des nouvelles ne suffit pas quand les révisions manquent ailleurs', () => {
+  // p1 : 61 révisions dues ; p2 : 30 nouvelles ; 23 révisions et 30 nouvelles faites (objectif 60, plafond 90)
+  const d = journee({ dues: 61, revisionsFaites: 23, nouvellesFaites: 30, plafond: 90 });
+  d.paquets.p2 = paquet('p2', Array.from({ length: 30 }, (_, i) => carte(`m${i}`)));
+  d.ordre = ['p2', 'p1'];
+  for (const c of d.paquets.p2.cartes) d.cartes[c.id] = { paquet: 'p2', carte: c };
+  const o = objectifDuJour(d, T, 60);
+  assert.deepEqual([o.encore, o.encoreRevisions], [37, 37]);
+  const p2 = apportDuFiltre(d, T, 'p2');
+  assert.deepEqual(p2, { revisions: 0, reprises: 0, nouvelles: 30 });
+  assert.ok(p2.revisions < o.encoreRevisions, 'la séance sur p2 seule ne suffit pas');
+  const tout = apportDuFiltre(d, T);
+  assert.ok(tout.revisions >= o.encoreRevisions && tout.revisions + tout.nouvelles >= o.encore, '« Tout » suffit');
 });
 
 test('revisionsRestantes : dues aujourd\'hui et pas encore répondues aujourd\'hui', () => {

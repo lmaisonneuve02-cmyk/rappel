@@ -115,6 +115,12 @@ html.sans-entete .entete { display: none; }
   display: grid; justify-items: end; gap: 5px; padding: 4px 0 4px 8px; min-height: 48px; align-content: center; flex: none;
 }
 .compteur__texte { font-family: var(--f-mono); font-weight: 500; font-size: 0.98rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Téléphone : « Révisions : r » sous les cartes, pour ne pas recouvrir « Rappel ». */
+@media (max-width: 34rem) {
+  .compteur__texte { display: grid; justify-items: end; line-height: 1.2; }
+  .compteur__sep { display: none; }
+  .compteur__rev { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+}
 .compteur--atteint .compteur__texte { color: var(--juste); }
 .compteur.monte .compteur__texte { animation: pop 0.5s ease-out; }
 .sous-entete:empty { display: none; }

@@ -6,7 +6,7 @@ import { estAcquise } from '../../js/fsrs.js';
 import { jourParis } from '../../js/temps.js';
 import {
   demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, carteDeQuestion, geminiSimule,
-  fichiersDepot, attendre, texte, lireDonnees } from './harnais.mjs';
+  fichiersDepot, attendre, texte, lireDonnees, dont } from './harnais.mjs';
 
 let serveur, navigateur;
 before(async () => { serveur = await demarrerServeur(); navigateur = await lancerNavigateur(); });
@@ -135,7 +135,8 @@ async function seanceComplete(theme) {
       await repondre(page, REPONSES[id]);
       assert.equal(await mot(page), 'Juste');
       assert.equal(await effet(page), `+1 carte : ${n}/30`);
-      if (id === 'col-03') await page.getByText("Objectif du jour atteint : 5 cartes aujourd'hui. Tu peux t'arrêter ou continuer.").waitFor();
+      // Plus rien à compter (la carte ratée qui revient est déjà comptée) : objectif atteint à 5/30.
+      if (id === 'col-03') await page.getByText("Objectif du jour atteint : toutes tes cartes du jour sont faites. Tu peux t'arrêter ou continuer.").waitFor();
       await suivant(page);
     }
 
@@ -193,8 +194,11 @@ async function seanceComplete(theme) {
     await page.locator('.page--aujourdhui').waitFor();
     await page.getByText("Tout est fait pour aujourd'hui").waitFor();
     await page.getByText('Les 3 nouvelles cartes du jour sont faites. Tu peux en demander plus dans Réglages.').waitFor();
-    await page.getByText('Plus rien à proposer aujourd\'hui : objectif du jour atteint.').waitFor();
+    await page.getByText("Objectif du jour atteint : toutes tes cartes du jour sont faites. Tu peux t'arrêter ou continuer.").waitFor();
     assert.equal(await compteur(page), 'Cartes : 5/30 ✓');
+    // Toutes les cartes vues ont été répondues aujourd'hui : rien en avance, les QCM seulement.
+    assert.equal(await page.getByRole('button', { name: 'Réviser en avance' }).count(), 0);
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Faire des QCM');
     await verifierEcran(page, nom('apres'));
     o.verifierConsole();
   } finally {
@@ -441,7 +445,7 @@ test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui d
     await page.goto(serveur.base);
     await page.locator('.page--aujourdhui .bloc-seance').waitFor();
     await page.locator('.pastille', { hasText: 'Les couleurs' }).click();
-    await page.locator('.barre-action .btn--principal', { hasText: 'Commencer' }).click();
+    await clic(page, 'Ce paquet (3)');
     await clic(page, "J'ai lu, on y va");
     await page.locator('#reponse').waitFor();
     await clic(page, 'Je ne sais pas');
@@ -452,6 +456,72 @@ test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui d
     await page.getByText('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.').waitFor();
     await verifierEcran(page, 'fichier-abime');
     assert.equal(faux.commits().length, 1, 'rien n\'est envoyé par-dessus le fichier abîmé');
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
+// Il se note lui-même (« Voir la réponse », « Je l'avais ») : la carte suivante s'affiche directement.
+async function jeLAvais(page) {
+  await page.locator('#reponse').waitFor();
+  await clic(page, 'Voir la réponse');
+  await clic(page, "Je l'avais");
+  await page.locator('#toast', { hasText: 'Noté : juste' }).waitFor();
+}
+
+test('un seul paquet : s\'il ne suffit pas pour l\'objectif, « Tout » passe en principal', async () => {
+  const o = await ouvrir(navigateur, serveur.base);
+  const { page } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    // Les couleurs : 3 nouvelles cartes, mais les 2 révisions du jour sont dans Les formes (révisions d'abord).
+    await page.locator('.pastille', { hasText: 'Les couleurs' }).click();
+    await page.getByText('3 nouvelles cartes', { exact: true }).waitFor();
+    assert.equal(await texte(page.locator('.objectif-ligne')), `Objectif : encore 5 cartes${dont('2 révisions')}. Ce paquet ne suffit pas : choisis « Tout ».`);
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Commencer · Tout (5)');
+    await verifierEcran(page, 'un-paquet-aujourdhui');
+
+    // Il garde son choix : ce paquet seulement.
+    await clic(page, 'Ce paquet (3)');
+    await clic(page, "J'ai lu, on y va");
+    for (let i = 0; i < 3; i++) await jeLAvais(page);
+    await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
+    assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '3/30');
+    assert.equal(await texte(page.locator('.objectif-ligne')), `Encore 2 cartes${dont('2 révisions')} pour l'objectif. Il en reste dans les autres paquets.`);
+    // Pas de « Réviser en avance » sur ce paquet : ses cartes sont déjà comptées.
+    assert.equal(await page.getByRole('button', { name: 'Réviser en avance' }).count(), 0);
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Continuer · Tout (2)');
+    await verifierEcran(page, 'un-paquet-fin');
+
+    // « Tout » : les 2 révisions ; plus rien à compter, objectif atteint.
+    await clic(page, 'Continuer · Tout (2)');
+    for (let i = 0; i < 2; i++) {
+      await page.locator('.puce', { hasText: 'Révision' }).waitFor();
+      assert.equal((await question(page)).paquet, 'ess-formes');
+      await jeLAvais(page);
+    }
+    await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
+    await page.getByText("Objectif du jour atteint. Tu peux t'arrêter là.").waitFor();
+    assert.equal(await page.locator('.grand-compteur--atteint').count(), 1);
+    assert.equal(await compteur(page), 'Cartes : 5/30 ✓');
+
+    // Retour : l'écran du jour revient sur « Tout » (pas « Rien à faire dans ce paquet »).
+    await clic(page, 'Retour');
+    await page.getByText("Tout est fait pour aujourd'hui").waitFor();
+    await page.getByText("Objectif du jour atteint : toutes tes cartes du jour sont faites. Tu peux t'arrêter ou continuer.").waitFor();
+
+    // Suivi : même compteur, ✓ sur la ligne du jour.
+    await page.locator('.onglet[data-vue="suivi"]').click();
+    await page.getByRole('heading', { name: 'Suivi' }).waitFor();
+    assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '5/30');
+    assert.equal(await texte(page.locator('.grand-compteur__texte')), "cartes aujourd'hui");
+    assert.equal(await page.locator('.grand-compteur--atteint').count(), 1);
+    await page.getByText('Cartes par jour (une carte compte une fois). Repère : 30.').waitFor();
+    assert.equal(await page.locator('.jour--atteint').count(), 1);
+    assert.match(await texte(page.locator('.jour').first().locator('.jour__valeur')), /^5/);
+    await verifierEcran(page, 'un-paquet-suivi');
     o.verifierConsole();
   } finally {
     await o.fermer();

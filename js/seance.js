@@ -7,6 +7,9 @@ const NOUVELLES_DEFAUT = 15;
 const PAUSE_DEFAUT = 30;
 const EN_AVANCE = 20;   // révisions proposées en avance quand rien n'est dû
 const RECUL_FAUX = 4;   // une carte fausse revient 4 positions plus loin (comme v1)
+// Jour du changement de règle (16 oct. 2026, règle notée par l'utilisateur) : seul le total compte,
+// car Rappel 2 lui avait servi les nouvelles cartes en premier ce jour-là.
+export const JOURS_TOTAL_SEUL = new Set(['2026-10-16']);
 
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 // Compteur du bilan qui correspond à un verdict (même règle que noter : par la note).
@@ -108,11 +111,12 @@ export function revisionsRestantes(donnees, maintenant) {
 // Objectif du jour (règle du 16 oct. 2026, décision explicite de l'utilisateur) : `objectif` cartes,
 // révisions d'abord. Atteint si cartes >= objectif et révisions faites >= min(objectif, révisions du jour),
 // ou s'il ne reste plus rien à proposer (aucune révision restante, aucune nouvelle carte possible).
+// Le 16 oct. (JOURS_TOTAL_SEUL), seul le total compte.
 // encore / encoreRevisions : ce qui manque (0 une fois atteint ; jamais plus que ce qui reste à proposer).
 export function objectifDuJour(donnees, maintenant, objectif) {
   const { cartes, revisions } = cartesDuJour(donnees, maintenant);
   const restantes = revisionsRestantes(donnees, maintenant);
-  const revisionsVisees = Math.min(objectif, revisions + restantes);
+  const revisionsVisees = JOURS_TOTAL_SEUL.has(jourParis(maintenant)) ? 0 : Math.min(objectif, revisions + restantes);
   const fait = cartes >= objectif && revisions >= revisionsVisees;
   // « Rien à proposer » suppose des cartes chargées : sans paquet, rien n'est atteint.
   const possibles = fait ? 0 : nouvellesPossibles(donnees, maintenant).length;
@@ -145,12 +149,23 @@ export function nouvellesPossibles(donnees, maintenant, filtre = 'tout') {
   return res;
 }
 
-// Les révisions les plus proches, pour « Réviser en avance ».
-function plusProches(donnees, filtre, n) {
+// Ce qu'une séance sur ce filtre apporterait à l'objectif : révisions pas encore répondues aujourd'hui
+// (une carte ratée qui revient est déjà comptée) et nouvelles cartes proposables.
+export function apportDuFiltre(donnees, maintenant, filtre = 'tout') {
+  const debut = debutJourParis(maintenant);
+  const dues = aReviser(donnees, maintenant, filtre);
+  const revisions = dues.filter(el => etatStocke(donnees, el.paquet, el.carteId).last < debut).length;
+  return { revisions, reprises: dues.length - revisions, nouvelles: nouvellesPossibles(donnees, maintenant, filtre).length };
+}
+
+// « Réviser en avance » : les révisions les plus proches, sans les cartes déjà répondues aujourd'hui
+// (elles sont déjà comptées et viennent d'être revues).
+export function revisionsEnAvance(donnees, maintenant, filtre = 'tout', n = EN_AVANCE) {
+  const debut = debutJourParis(maintenant);
   const res = [];
   for (const { paquet, carte } of cartesDe(donnees, filtre)) {
     const etat = etatStocke(donnees, paquet, carte.id);
-    if (etat) res.push({ paquet, carteId: carte.id, due: etat.due });
+    if (etat && etat.last < debut) res.push({ paquet, carteId: carte.id, due: etat.due });
   }
   return res.sort((a, b) => a.due - b.due).slice(0, n).map(({ paquet, carteId }) => ({ paquet, carteId }));
 }
@@ -184,7 +199,7 @@ export class Seance {
     let revisions = aReviser(donnees, t0, filtre);
     this.enAvance = false;
     if (!revisions.length && enAvance) {
-      revisions = plusProches(donnees, filtre, EN_AVANCE);
+      revisions = revisionsEnAvance(donnees, t0, filtre);
       this.enAvance = revisions.length > 0;
     }
     const cle = el => this.carteDe(el)?.fiche || el.paquet;

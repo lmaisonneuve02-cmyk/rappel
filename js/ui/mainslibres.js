@@ -7,6 +7,7 @@ import { CLES } from '../config.js';
 import { plainQ } from '../texte.js';
 import {
   h, vider, bouton, libeller, boutonConfirme, icone, ficheNoeud, VERDICTS, nb, lireLocal, aideVue, compterAide, empiler, depiler, annoncer,
+  texteEncore,
 } from './commun.js';
 
 const COMMANDES = ['je ne sais pas', 'répète', 'suivant', 'pause', 'je conteste', 'stop'];
@@ -99,15 +100,18 @@ export function creer(ctx, params = {}) {
     liberer = null;
     ctx.sync.pousser('fin-seance').catch(() => {});
     const b = d.bilan || {};
+    const jour = ctx.jour();   // comme la fin de séance écrite : compteur, ✓, ce qui manque
     vider(contenu,
       h('h1', { class: 'titre-page', tabindex: '-1', text: d.phase === 'erreur' ? 'Mains libres arrêté' : 'Séance terminée' }),
       d.phase === 'erreur' ? h('p', { class: 'chapeau', text: d.message }) : null,
-      h('div', { class: 'grand-compteur' },
-        h('p', { class: 'grand-compteur__chiffre', text: `${ctx.cartes()}/${ctx.objectif()}` }),
+      h('div', { class: ['grand-compteur', jour.atteint && 'grand-compteur--atteint'] },
+        h('p', { class: 'grand-compteur__chiffre' }, `${jour.cartes}/${jour.objectif}`, jour.atteint ? icone('juste') : null),
         h('p', { class: 'grand-compteur__texte', text: "cartes aujourd'hui" })),
       h('p', { class: 'chiffres chiffres--doux', text: [nb(b.reponses || b.faites || 0, 'réponse'), b.justes && nb(b.justes, 'juste'),
-        b.partielles && nb(b.partielles, 'partielle'), b.fausses && nb(b.fausses, 'fausse')].filter(Boolean).join(' · ') }));
-    vider(barre, bouton('Retour', { principal: true, onClick: () => ctx.aller('aujourdhui') }));
+        b.partielles && nb(b.partielles, 'partielle'), b.fausses && nb(b.fausses, 'fausse')].filter(Boolean).join(' · ') }),
+      h('p', { class: 'objectif-ligne', text: jour.atteint ? "Objectif du jour atteint. Tu peux t'arrêter là."
+        : `${texteEncore(jour).replace(/^e/, 'E')} pour l'objectif.` }));
+    vider(barre, bouton('Retour', { principal: true, onClick: () => ctx.aller('aujourdhui', { filtre: params.filtre || 'tout' }) }));
     contenu.querySelector('h1').focus({ preventScroll: true });
     annoncer('Séance terminée.');
   }

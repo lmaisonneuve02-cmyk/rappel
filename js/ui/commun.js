@@ -176,6 +176,16 @@ export function nb(n, mot, motPluriel) { return `${n} ${Math.abs(n) >= 2 ? (motP
 export const virgule = x => String(Math.round((Number(x) || 0) * 100) / 100).replace('.', ',');
 export function points(x) { const v = Math.round((Number(x) || 0) * 100) / 100; return `${virgule(v)} point${v >= 2 ? 's' : ''}`; }
 
+// Objectif du jour (objectifDuJour) : ce qui manque, « encore 12 cartes (dont 5 révisions) ».
+export function texteEncore(jour) {
+  return `encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''}`;
+}
+// Objectif atteint : même phrase sur Aujourd'hui et en séance (atteint aussi quand il ne reste rien à compter).
+export function texteAtteint(jour) {
+  return jour.cartes >= jour.objectif ? `Objectif du jour atteint : ${nb(jour.cartes, 'carte')} aujourd'hui. Tu peux t'arrêter ou continuer.`
+    : "Objectif du jour atteint : toutes tes cartes du jour sont faites. Tu peux t'arrêter ou continuer.";
+}
+
 const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 // 'AAAA-MM-JJ' → « lundi 12 octobre » (ou « lun. 12 » en court).
@@ -216,14 +226,24 @@ export { CLES };
 
 // Chaque surimpression ou écran plein ajoute une entrée ; « Retour » appelle sa fonction de fermeture.
 const pile = [];
+const enAttente = [];   // empilées pendant un retour pas encore fait (history.back() est asynchrone)
 let popsIgnores = 0;
 let pileBranchee = false;
+
+function pousser() {
+  try { history.pushState({ rappel: pile.length }, ''); } catch { /* rien */ }
+}
 
 function brancherPile() {
   if (pileBranchee) return;
   pileBranchee = true;
   window.addEventListener('popstate', () => {
-    if (popsIgnores > 0) { popsIgnores--; return; }
+    if (popsIgnores > 0) {
+      popsIgnores--;
+      // Retour fait : les entrées empilées entre-temps (séance → séance) ont enfin leur place.
+      if (!popsIgnores) for (const _ of enAttente.splice(0)) pousser();
+      return;
+    }
     const entree = pile.pop();
     if (entree) entree.fermer({ parRetour: true });
   });
@@ -233,7 +253,8 @@ export function empiler(fermer) {
   brancherPile();
   const entree = { fermer };
   pile.push(entree);
-  try { history.pushState({ rappel: pile.length }, ''); } catch { /* rien */ }
+  // Un pushState avant la fin d'un history.back() serait défait par ce retour : il attend.
+  if (popsIgnores > 0) enAttente.push(entree); else pousser();
   return entree;
 }
 
@@ -242,6 +263,8 @@ export function depiler(entree) {
   const i = pile.lastIndexOf(entree);
   if (i < 0) return;
   pile.splice(i, 1);
+  const j = enAttente.indexOf(entree);
+  if (j >= 0) { enAttente.splice(j, 1); return; }   // pas encore d'entrée d'historique
   popsIgnores++;
   try { history.back(); } catch { popsIgnores--; }
 }

@@ -176,7 +176,7 @@ export function creer(ctx) {
         h('li', null, icone('fiche'), h('span', { text: 'Avant de nouvelles cartes, tu lis leur micro-fiche (1 min).' })),
         h('li', null, icone('micro'), h('span', { text: 'Tu réponds en écrivant ou en dictant. Réponse dans ta tête ? « Voir la réponse », et tu te notes.' })),
         h('li', null, icone('juste'), h('span', { text: 'Je corrige : Juste, Partiel ou Faux. Pas d\'accord ? « Je conteste ».' })),
-        h('li', null, icone('soleil'), h('span', { text: `Objectif : ${ctx.objectif()} nouvelles cartes par jour, et toutes les révisions du jour.` }))),
+        h('li', null, icone('soleil'), h('span', { text: `Objectif : ${ctx.objectif()} cartes par jour : tes révisions d'abord, puis des nouvelles pour compléter.` }))),
       sansCle ? h('p', { class: 'aide', text: 'Sans clé Gemini, la correction se fait sur ton appareil. Tu pourras ajouter la clé dans Réglages.' }) : null);
     vider(barre, bouton('Voir ma séance du jour', { principal: true, onClick: () => ctx.aller('aujourdhui') }));
   }

@@ -64,7 +64,7 @@ function ficheDe(donnees, carte, paquet) {
 export function creer(ctx, params = {}) {
   const micro = !!reconnaissanceDisponible(window);
   let donnees = ctx.donnees();
-  const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance, nouvellesDAbord: true });
+  const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance });
   const objectifAuDepart = ctx.atteint();
   let objectifAnnonce = objectifAuDepart;
   const geminiPrevenu = new Set();   // codes d'erreur de Gemini déjà signalés dans cette séance
@@ -176,7 +176,7 @@ export function creer(ctx, params = {}) {
     majHaut();
     vider(contenu,
       h('h1', { class: 'titre-page', tabindex: '-1', text: `${e.faites} cartes faites. Une pause ?` }),
-      h('p', { class: 'chiffres', text: `${e.minutes} min · nouvelles : ${ctx.acquises()}/${ctx.objectif()} · révisions : ${ctx.revisions()}` }),
+      h('p', { class: 'chiffres', text: `${e.minutes} min · ${compteDuJour()}` }),
       h('p', { class: 'chapeau', text: 'Ton attention baisse avant que tu la sentes baisser. Cinq minutes loin de l\'écran, puis tu reprends. Ou tu t\'arrêtes là : les cartes restantes attendront.' }));
     const continuer = () => { seance.continuer(); suivant(); };
     vider(barre, h('div', { class: 'barre-action__rang' },
@@ -282,7 +282,7 @@ export function creer(ctx, params = {}) {
   // Note la carte, enregistre les opérations, puis affiche le verdict (ou passe à la suite).
   function noter(e, resultat, reponse, opsCorrection, montrer) {
     const t = ctx.maintenant();
-    const avant = ctx.acquises();
+    const avant = ctx.cartes();
     const note = seance.noter({
       verdict: resultat.verdict, correcteur: resultat.correcteur, reponse, duree: Math.max(0, t - debutCarte),
       confiance: resultat.confiance, maintenant: t, appareil: ctx.appareil,
@@ -291,7 +291,7 @@ export function creer(ctx, params = {}) {
     donnees = ctx.donnees();
     seance.majDonnees(donnees);
     if (resultat.verdict === 'faux') ratees.add(e.paquet + '/' + e.carte.id);
-    const apres = ctx.acquises();
+    const apres = ctx.cartes();
     const v = { e, resultat, reponse, note, etatApres: note.etatApres, avant, apres, conteste: false, issue: null };
     if (montrer) afficherVerdict(v);
     return v;
@@ -302,12 +302,18 @@ export function creer(ctx, params = {}) {
     return v.resultat.verdict === 'faux' ? 'revient un peu plus loin dans la séance' : delaiTexte(v.etatApres, maintenant);
   }
 
-  // Ce que la réponse change au compteur, dit en clair.
+  // Cartes du jour et révisions restantes, comme l'en-tête.
+  function compteDuJour() {
+    const j = ctx.jour();
+    return `cartes : ${j.cartes}/${j.objectif}${j.revisionsRestantes ? ` · révisions : ${j.revisionsRestantes}` : ''}`;
+  }
+
+  // Ce que la réponse change au compteur, dit en clair (une carte compte une fois par jour).
   function effet(v) {
     const obj = ctx.objectif();
-    const n = ctx.acquises();
-    if (n > v.avant) return `+1 nouvelle : ${n}/${obj}`;
-    return `Nouvelles : ${n}/${obj} · révisions restantes : ${ctx.revisions()}`;
+    const n = ctx.cartes();
+    if (n > v.avant) return `+1 carte : ${n}/${obj}`;
+    return `Déjà comptée aujourd'hui : ${n}/${obj}`;
   }
 
   // Ajuste la séance après une contestation acceptée (la carte ratée ne doit plus revenir).
@@ -331,9 +337,7 @@ export function creer(ctx, params = {}) {
     const peutContester = !v.conteste && (r.verdict === 'partiel' || r.verdict === 'faux')
       && !['auto', 'je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne();
 
-    const bandeauVerdict = verdictNoeud(r, { lignes: nsp
-      ? [`Pas grave. ${delai}`, h('p', { class: 'verdict__effet', text: 'Réussis-la à ce moment-là : elle comptera.' })]
-      : [delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
+    const bandeauVerdict = verdictNoeud(r, { lignes: [nsp ? `Pas grave. ${delai}` : delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
     const attendue = h('section', { class: 'bloc-liste' }, h('h3', { class: 'petit-titre', text: 'Réponse attendue' }), reponseAttendue(carte));
     const taReponse = v.reponse ? h('section', { class: 'bloc-liste bloc-liste--doux' }, h('h3', { class: 'petit-titre', text: 'Ta réponse' }), h('p', { class: 'ta-reponse', text: `« ${v.reponse} »` })) : null;
     const trouvees = liste('Ce que tu as dit de juste', r.idees_trouvees, 'bloc-liste--juste');
@@ -368,7 +372,7 @@ export function creer(ctx, params = {}) {
     if (!objectifAnnonce && ctx.atteint()) {
       objectifAnnonce = true;
       terminerIci = h('button', { type: 'button', class: 'lien', text: "M'arrêter là", onclick: () => afficherFin() });
-      notes.push(bandeau(`Objectif du jour atteint : ${ctx.acquises()} nouvelles cartes et toutes les révisions. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
+      notes.push(bandeau(`Objectif du jour atteint : ${nb(ctx.cartes(), 'carte')} aujourd'hui. Tu peux t'arrêter ou continuer.`, { type: 'reussite', action: terminerIci }));
     }
 
     vider(contenu,
@@ -512,9 +516,8 @@ export function creer(ctx, params = {}) {
     majLigneSynchro();
     const interrompue = seance.etape().type !== 'fin';
     const b = seance.bilan;
-    const obj = ctx.objectif();
-    const n = ctx.acquises();
-    const reste = Math.max(0, obj - n);
+    const jour = ctx.jour();
+    const { objectif: obj, cartes: n, atteint } = jour;
     // La carte en cours de correction ne compte plus parmi les restantes : sa réponse est donnée.
     const restantes = interrompue ? Math.max(0, seance.restantes() - (correctionEnCours ? 1 : 0)) : 0;
     const fiches = (b.fichesARelire || []).map(id => donnees.fiches[id]).filter(Boolean);
@@ -526,12 +529,13 @@ export function creer(ctx, params = {}) {
 
     vider(contenu,
       h('h1', { class: 'titre-page', tabindex: '-1', text: 'Séance terminée' }),
-      h('div', { class: ['grand-compteur', reste === 0 && 'grand-compteur--atteint'] },
-        h('p', { class: 'grand-compteur__chiffre' }, `${n}/${obj}`, reste === 0 ? icone('juste') : null),
-        h('p', { class: 'grand-compteur__texte', text: "acquises aujourd'hui" }),
+      h('div', { class: ['grand-compteur', atteint && 'grand-compteur--atteint'] },
+        h('p', { class: 'grand-compteur__chiffre' }, `${n}/${obj}`, atteint ? icone('juste') : null),
+        h('p', { class: 'grand-compteur__texte', text: "cartes aujourd'hui" }),
         h('progress', { class: 'barre barre--grande', max: String(obj), value: String(Math.min(n, obj)), 'aria-hidden': 'true' })),
       h('p', { class: 'chiffres chiffres--doux', text: detail }),
-      reste > 0 ? h('p', { class: 'objectif-ligne', text: `Encore ${reste} pour l'objectif.` }) : h('p', { class: 'objectif-ligne', text: "Objectif du jour atteint. Tu peux t'arrêter là." }),
+      !atteint ? h('p', { class: 'objectif-ligne', text: `Encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''} pour l'objectif.` })
+        : h('p', { class: 'objectif-ligne', text: "Objectif du jour atteint. Tu peux t'arrêter là." }),
       fiches.length ? h('section', { class: 'a-relire' }, h('h2', { class: 'petit-titre', text: 'Fiches à relire' }),
         h('div', { class: 'pastilles pastilles--enveloppe' }, fiches.map(f => h('button', { type: 'button', class: 'pastille', onclick: () => ouvrirFiche(f) }, icone('fiche'), h('span', { text: titreFiche(f) }))))) : null,
       correctionEnCours ? h('p', { class: 'aide', 'aria-live': 'polite', text: 'Je finis de corriger ta dernière réponse…' }) : null,
@@ -540,7 +544,7 @@ export function creer(ctx, params = {}) {
     // Un seul bouton principal, selon la situation.
     const boutons = [];
     const retour = () => ctx.aller('aujourdhui');
-    if (restantes > 0 && reste > 0) {
+    if (restantes > 0 && !atteint) {
       boutons.push(bouton('Retour', { onClick: retour }));
       boutons.push(bouton(`Continuer · ${nb(restantes, 'carte')}`, { principal: true, attrs: { disabled: correctionEnCours }, onClick: () => {
         if (correctionEnCours) return;
@@ -548,7 +552,7 @@ export function creer(ctx, params = {}) {
         if (seance.etape().type === 'pause') seance.continuer();
         suivant();
       } }));
-    } else if (reste > 0) {
+    } else if (!atteint) {
       boutons.push(nQcm ? bouton(`Faire ${nQcm} QCM`, { onClick: () => ctx.aller('qcm', { demarrer: true }) }) : bouton('Retour', { onClick: retour }));
       boutons.push(bouton('Réviser en avance', { principal: true, onClick: () => ctx.aller('seance', { filtre: params.filtre || 'tout', enAvance: true }) }));
     } else if (nQcm) {

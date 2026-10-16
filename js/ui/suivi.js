@@ -16,17 +16,19 @@ export function creer(ctx) {
     const ues = parUE(d, now);
     const sem = contestationsParSemaine(d);
     const objectif = ctx.objectif();
-    const sig = JSON.stringify([jours, ues, sem[0], objectif]);
+    const aujourdhui = ctx.jour();   // comme l'en-tête : cartes du jour, objectif atteint
+    const sig = JSON.stringify([jours, ues, sem[0], objectif, aujourdhui]);
     if (!force && sig === signature) return;
     signature = sig;
     const auj = jours[0];
     const exceptions = d.exceptions?.jours || {};
-    const max = Math.max(objectif, ...jours.map(j => (j.acquises ?? j.reponses) || 0));
+    const max = Math.max(objectif, ...jours.map(j => (j.cartes ?? j.reponses) || 0));
 
+    // Jours passés : cartes du jour comparées à l'objectif ; aujourd'hui : la règle complète.
     const ligneJour = j => {
-      const v1 = j.acquises == null;
-      const valeur = v1 ? j.reponses : j.acquises;
-      const atteint = !v1 && j.acquises >= objectif;
+      const v1 = j.cartes == null;
+      const valeur = v1 ? j.reponses : j.cartes;
+      const atteint = !v1 && (j.jour === jourParis(now) ? aujourdhui.atteint : j.cartes >= objectif);
       const motif = exceptions[j.jour];
       const texte = motif && !valeur ? `jour off : ${motif}` : v1 ? (j.reponses ? `${nb(j.reponses, 'réponse')} (ancienne appli)` : '—') : (valeur ? String(valeur) : '—');
       return h('li', { class: ['jour', v1 && 'jour--v1', atteint && 'jour--atteint'] },
@@ -40,14 +42,14 @@ export function creer(ctx) {
       h('h1', { class: 'titre-page', text: 'Suivi' }),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: "Aujourd'hui" }),
-        h('div', { class: ['grand-compteur', auj.acquises >= objectif && 'grand-compteur--atteint'] },
-          h('p', { class: 'grand-compteur__chiffre' }, `${auj.acquises}/${objectif}`, auj.acquises >= objectif ? icone('juste') : null),
-          h('p', { class: 'grand-compteur__texte', text: 'cartes acquises' }),
-          h('progress', { class: 'barre barre--grande', max: String(objectif), value: String(Math.min(auj.acquises, objectif)), 'aria-hidden': 'true' }),
+        h('div', { class: ['grand-compteur', aujourdhui.atteint && 'grand-compteur--atteint'] },
+          h('p', { class: 'grand-compteur__chiffre' }, `${aujourdhui.cartes}/${objectif}`, aujourdhui.atteint ? icone('juste') : null),
+          h('p', { class: 'grand-compteur__texte', text: "cartes aujourd'hui" }),
+          h('progress', { class: 'barre barre--grande', max: String(objectif), value: String(Math.min(aujourdhui.cartes, objectif)), 'aria-hidden': 'true' }),
           h('p', { class: 'chiffres chiffres--doux', text: [nb(auj.reponses, 'réponse'), nb(auj.justes, 'juste'), nb(auj.nouvelles, 'nouvelle', 'nouvelles'), auj.qcm ? `QCM : ${virgule(auj.pointsQcm)} pt sur ${auj.qcm}` : null].filter(Boolean).join(' · ') }))),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: '14 derniers jours' }),
-        h('p', { class: 'aide', text: `Cartes acquises par jour. Repère : ${objectif}.` }),
+        h('p', { class: 'aide', text: `Cartes par jour (une carte compte une fois). Repère : ${objectif}.` }),
         h('ol', { class: 'jours' }, jours.map(ligneJour))),
       h('section', { class: 'bloc' },
         h('h2', { class: 'sous-titre', text: 'Par UE' }),
@@ -68,7 +70,7 @@ export function creer(ctx) {
           h('li', { text: 'Tu cherches la réponse avant de la voir : c\'est cet effort qui fait retenir.' }),
           h('li', { text: 'Une carte réussie revient de plus en plus tard ; ratée, elle revient un peu plus loin dans la séance.' }),
           h('li', { text: 'Gemini juge le sens, pas l\'orthographe ; sans clé ou hors ligne, ton appareil corrige. Pas d\'accord ? « Je conteste ».' }),
-          h('li', { text: `Une carte est acquise quand ta dernière réponse du jour est juste ou partielle ; objectif : ${objectif} par jour.` }),
+          h('li', { text: `Objectif : ${objectif} cartes par jour, révisions d'abord ; une carte compte une fois, même si elle revient après une erreur.` }),
           h('li', { text: 'En mains libres, je lis les questions et tu réponds à voix haute.' }),
           h('li', { text: 'Tes réponses sont gardées sur l\'appareil puis envoyées dans ton dépôt : tes autres appareils les retrouvent.' }))));
   }

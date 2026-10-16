@@ -1,6 +1,6 @@
 // Séance de révision : ce qu'il y a à faire aujourd'hui, file des cartes, étapes et notes.
 // Module pur : aucun accès au DOM ; horloge et aléa sont injectés.
-import { review, noteDe, estDisponible, estAcquise } from './fsrs.js';
+import { review, noteDe, estDisponible } from './fsrs.js';
 import { MIN, jourParis, debutJourParis, finJourParis, isoParis } from './temps.js';
 
 const NOUVELLES_DEFAUT = 15;
@@ -65,20 +65,37 @@ function espacer(file, cle) {
   return file;
 }
 
+// Clé d'une carte dans le journal (identifiants uniques par paquet).
+const cleLigne = l => `${l.paquet}/${l.carte}`;
+
+// Lignes du journal d'aujourd'hui (heure de Paris), contestations exclues.
+function lignesDuJour(donnees, maintenant) {
+  const debut = debutJourParis(maintenant), fin = finJourParis(maintenant);
+  return (donnees.reponses || []).filter(l => l && !estContestation(l) && l.ts >= debut && l.ts < fin);
+}
+
 // Nombre de cartes distinctes vues pour la première fois aujourd'hui (une contestation ne change rien),
 // plus les nouvelles faites dans v1 ce jour-là (historique, jour de bascule).
 export function nouvellesDuJour(donnees, maintenant) {
-  const debut = debutJourParis(maintenant), fin = finJourParis(maintenant);
   const cartes = new Set();
-  for (const l of donnees.reponses || []) {
-    if (l.nouvelle === true && !estContestation(l) && l.ts >= debut && l.ts < fin) cartes.add(l.carte);
-  }
+  for (const l of lignesDuJour(donnees, maintenant)) if (l.nouvelle === true) cartes.add(cleLigne(l));
   const v1 = Number(donnees.historique?.days?.[jourParis(maintenant)]?.nw);
   return cartes.size + (Number.isFinite(v1) && v1 > 0 ? v1 : 0);
 }
 
-// Règle de déblocage (depuis le 15 oct. 2026) : révisions du jour encore à faire = cartes dues au plus tard
-// aujourd'hui et pas encore répondues aujourd'hui.
+// Cartes du jour (règle du 16 oct. 2026) : cartes distinctes répondues aujourd'hui, nouvelles et révisions
+// (en avance comprises). Une carte ratée qui revient compte une fois ; contestations et QCM exclus.
+// revisions : cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'est nouvelle).
+export function cartesDuJour(donnees, maintenant) {
+  const cartes = new Set(), nouvelles = new Set();
+  for (const l of lignesDuJour(donnees, maintenant)) {
+    cartes.add(cleLigne(l));
+    if (l.nouvelle === true) nouvelles.add(cleLigne(l));
+  }
+  return { cartes: cartes.size, nouvelles: nouvelles.size, revisions: cartes.size - nouvelles.size };
+}
+
+// Révisions du jour encore à faire : cartes dues au plus tard aujourd'hui et pas encore répondues aujourd'hui.
 export function revisionsRestantes(donnees, maintenant) {
   const debut = debutJourParis(maintenant), fin = finJourParis(maintenant);
   let n = 0;
@@ -88,14 +105,23 @@ export function revisionsRestantes(donnees, maintenant) {
   return n;
 }
 
-// Ancienne règle (jusqu'au 14 oct.) : cartes dont la dernière réponse d'aujourd'hui est juste ou partielle.
-export function acquisesDuJour(donnees, maintenant) {
-  const jour = jourParis(maintenant);
-  let n = 0;
-  for (const cartes of Object.values(donnees.srs || {})) {
-    for (const etat of Object.values(cartes || {})) if (estAcquise(etat, jour)) n++;
-  }
-  return n;
+// Objectif du jour (règle du 16 oct. 2026, décision explicite de l'utilisateur) : `objectif` cartes,
+// révisions d'abord. Atteint si cartes >= objectif et révisions faites >= min(objectif, révisions du jour),
+// ou s'il ne reste plus rien à proposer (aucune révision restante, aucune nouvelle carte possible).
+// encore / encoreRevisions : ce qui manque (0 une fois atteint ; jamais plus que ce qui reste à proposer).
+export function objectifDuJour(donnees, maintenant, objectif) {
+  const { cartes, revisions } = cartesDuJour(donnees, maintenant);
+  const restantes = revisionsRestantes(donnees, maintenant);
+  const revisionsVisees = Math.min(objectif, revisions + restantes);
+  const fait = cartes >= objectif && revisions >= revisionsVisees;
+  // « Rien à proposer » suppose des cartes chargées : sans paquet, rien n'est atteint.
+  const possibles = fait ? 0 : nouvellesPossibles(donnees, maintenant).length;
+  const rien = !fait && restantes === 0 && possibles === 0 && Object.keys(donnees.paquets || {}).length > 0;
+  const atteint = fait || rien;
+  const encoreRevisions = atteint ? 0 : Math.max(0, revisionsVisees - revisions);
+  // Tout faire (révisions restantes et nouvelles possibles) mène à « rien à proposer » : c'est le plus exigé.
+  const encore = atteint ? 0 : Math.min(Math.max(objectif - cartes, encoreRevisions), restantes + possibles);
+  return { objectif, cartes, revisionsFaites: revisions, revisionsRestantes: restantes, atteint, encore, encoreRevisions };
 }
 
 export function aReviser(donnees, maintenant, filtre = 'tout') {
@@ -137,7 +163,7 @@ function sansVide(objet) {
 
 export class Seance {
   // maintenant : ms, ou une fonction qui renvoie l'heure (horloge injectée).
-  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, nouvellesDAbord = false, rnd = Math.random }) {
+  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, rnd = Math.random }) {
     this.donnees = donnees;
     this.horloge = typeof maintenant === 'function' ? maintenant : null;
     const t0 = this.horloge ? this.horloge() : maintenant;
@@ -163,10 +189,8 @@ export class Seance {
     }
     const cle = el => this.carteDe(el)?.fiche || el.paquet;
     revisions = espacer(melanger(revisions, rnd), cle);
-    const nouvelles = nouvellesPossibles(donnees, t0, filtre);
-    // L'appli : les nouvelles cartes de l'objectif d'abord, puis les révisions, puis les nouvelles en plus (15/10).
-    const manque = Math.max(0, nombre(donnees.reglages?.objectifJour, 30) - nouvellesDuJour(donnees, t0));
-    this.file = nouvellesDAbord ? [...nouvelles.slice(0, manque), ...revisions, ...nouvelles.slice(manque)] : [...revisions, ...nouvelles];
+    // Révisions d'abord, puis les nouvelles cartes pour compléter (jusqu'à nouvellesParJour).
+    this.file = [...revisions, ...nouvellesPossibles(donnees, t0, filtre)];
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.

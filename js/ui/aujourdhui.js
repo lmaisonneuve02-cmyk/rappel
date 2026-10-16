@@ -28,6 +28,11 @@ function cartesRestantesJamaisVues(d) {
   return n;
 }
 
+// Ce qui manque pour l'objectif : « encore 12 cartes (dont 5 révisions) ».
+function encore(jour) {
+  return `encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''}`;
+}
+
 function demain(d, now) {
   const t = finJourParis(now) + 1;
   let n = 0;
@@ -58,9 +63,9 @@ export function creer(ctx) {
     const aDesCartes = Object.keys(d.paquets).length > 0;
     const filtre = filtreDuJour(d, now);
     const r = aDesCartes ? resume(d, now, filtre) : null;
-    const acquises = ctx.acquises();
-    const objectif = ctx.objectif();
-    const sig = JSON.stringify([!!cles.jeton, aDesCartes, r, filtre, acquises, objectif, ctx.revisions(), etat.mode, etat.code, lent, d.ordre.length, ctx.enLigne()]);
+    const jour = ctx.jour();   // objectif du jour : cartes, révisions faites et restantes, atteint
+    const objectif = jour.objectif;
+    const sig = JSON.stringify([!!cles.jeton, aDesCartes, r, filtre, jour, etat.mode, etat.code, lent, d.ordre.length, ctx.enLigne()]);
     if (!force && sig === signature) return;
     signature = sig;
     actionEntree = null;
@@ -104,13 +109,12 @@ export function creer(ctx) {
     } else if (etat.mode === 'erreur' && etat.code === 'illisible') {
       blocs.push(bandeau('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.', { type: 'erreur' }));
     }
-    const revRestantes = ctx.revisions();
-    if (acquises >= objectif && revRestantes === 0) {
-      blocs.push(bandeau(`${acquises} nouvelles cartes et toutes les révisions : objectif du jour atteint. Tu peux t'arrêter ou continuer.`, { type: 'reussite' }));
+    if (jour.atteint) {
+      blocs.push(bandeau(jour.cartes >= objectif ? `${nb(jour.cartes, 'carte')} aujourd'hui : objectif du jour atteint. Tu peux t'arrêter ou continuer.`
+        : "Plus rien à proposer aujourd'hui : objectif du jour atteint.", { type: 'reussite' }));
     }
 
     const paquetNom = filtre === 'tout' ? null : (d.paquets[filtre]?.nom || filtre);
-    const reste = Math.max(0, objectif - acquises);
     const enLigne = ctx.enLigne() && etat.mode !== 'hors-ligne';
 
     if (r.total > 0) {
@@ -120,9 +124,9 @@ export function creer(ctx) {
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
         h('p', { class: 'chiffres', text: chiffres }),
-        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${r.revisions && r.nouvelles ? ' · nouvelles d\'abord' : ''}` }),
-        (reste > 0 || revRestantes > 0) ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : encore ${[reste ? nb(reste, 'nouvelle carte', 'nouvelles cartes') : null, revRestantes ? nb(revRestantes, 'révision') : null].filter(Boolean).join(' et ')}. ` }),
-          'Fais toute la séance.') : null));
+        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${r.revisions && r.nouvelles ? ' · révisions d\'abord' : ''}` }),
+        !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${encore(jour)}. ` }),
+          r.total >= jour.encore && r.revisions >= jour.encoreRevisions ? 'Cette séance peut suffire.' : 'Fais toute la séance.') : null));
     } else {
       const total = resume(d, now, 'tout');
       const prochaines = demain(d, now);
@@ -130,7 +134,8 @@ export function creer(ctx) {
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page titre-page--icone' }, icone('juste', { classe: 'icone--reussite' }), h('span', { text: paquetNom ? 'Rien à faire dans ce paquet' : "Tout est fait pour aujourd'hui" })),
         paquetNom && total.total ? h('p', { class: 'chapeau', text: `Il reste ${nb(total.total, 'carte')} dans les autres paquets.` }) : null,
-        reste > 0 ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Encore ${reste} nouvelles cartes pour l'objectif. ` }), 'Demande-en plus dans Réglages › Rythme.') : null,
+        !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${encore(jour)}. ` }),
+          paquetNom ? 'Choisis « Tout » pour continuer.' : 'Révise en avance pour compléter.') : null,
         prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
     }
 
@@ -190,9 +195,10 @@ export function creer(ctx) {
       actionEntree = () => ctx.aller('seance', { filtre });
       vider(barre, bouton(libelle, { principal: true, onClick: actionEntree }));
     } else {
-      const enAvance = bouton('Réviser en avance', { principal: reste > 0, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) });
-      const faireQcm = qcm ? bouton('Faire des QCM', { principal: reste === 0, onClick: () => ctx.aller('qcm') }) : null;
-      vider(barre, h('div', { class: 'barre-action__rang' }, reste > 0 ? [faireQcm, enAvance] : [enAvance, faireQcm]));
+      // Objectif atteint : rien n'est exigé de plus, les QCM passent devant.
+      const enAvance = bouton('Réviser en avance', { principal: !jour.atteint || !qcm, onClick: () => ctx.aller('seance', { filtre, enAvance: true }) });
+      const faireQcm = qcm ? bouton('Faire des QCM', { principal: jour.atteint, onClick: () => ctx.aller('qcm') }) : null;
+      vider(barre, h('div', { class: 'barre-action__rang' }, jour.atteint ? [enAvance, faireQcm] : [faireQcm, enAvance]));
     }
   }
 

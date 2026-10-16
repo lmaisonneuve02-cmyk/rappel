@@ -91,7 +91,7 @@ export function creer(ctx, params = {}) {
 
     vider(page,
       h('h1', { class: 'titre-page', text: 'QCM' }),
-      h('p', { class: 'chapeau', text: 'Format fac : 5 propositions, une ou plusieurs vraies. Ils ne comptent pas dans tes cartes acquises.' }),
+      h('p', { class: 'chapeau', text: 'Format fac : 5 propositions, une ou plusieurs vraies. Ils ne comptent pas dans tes cartes du jour.' }),
       h('section', { class: 'bloc-seance' },
         h('h2', { class: 'sous-titre', text: 'Mélange des cours vus' }),
         melange.length

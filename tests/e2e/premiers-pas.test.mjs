@@ -53,7 +53,7 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
 
     await clic(page, 'Continuer');
     await page.getByRole('heading', { name: "C'est parti" }).waitFor();
-    await page.getByText('Objectif : 30 nouvelles cartes par jour, et toutes les révisions du jour.').waitFor();
+    await page.getByText('Objectif : 30 cartes par jour : tes révisions d\'abord, puis des nouvelles pour compléter.').waitFor();
     await verifierEcran(page, 'premiers-pas-3');
 
     await clic(page, 'Voir ma séance du jour');
@@ -61,9 +61,24 @@ test('premiers pas : jeton, clé Gemini, puis la séance du jour', async () => {
     await page.getByRole('heading', { name: 'Ta séance du jour' }).waitFor();
     await page.getByText('2 révisions · 3 nouvelles cartes').waitFor();
     assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Commencer · 5 cartes');
-    assert.equal(await compteur(page), 'Nouvelles : 0/30 · Révisions : 2');
+    assert.equal(await compteur(page), 'Cartes : 0/30 · Révisions : 2');
+    assert.equal(await page.locator('#compteur').getAttribute('aria-label'), "0 carte sur 30 aujourd'hui, 2 révisions à faire. Comment on compte\u00a0?");
+    // Révisions d'abord ; pas plus exigé que ce qui reste à proposer (2 révisions + 3 nouvelles).
+    await page.getByText("environ 3 min · révisions d'abord").waitFor();
+    await page.getByText('Objectif : encore 5 cartes (dont 2 révisions). Cette séance peut suffire.').waitFor();
     await page.locator('#synchro-texte', { hasText: 'Enregistré' }).waitFor();
     await verifierEcran(page, 'premiers-pas-aujourdhui');
+
+    // « Comment on compte » : la règle du jour en clair.
+    await page.locator('#compteur').click();
+    const feuille = page.getByRole('dialog');
+    await feuille.getByText("Objectif : 30 cartes par jour (révisions d'abord, puis des nouvelles pour compléter).").waitFor();
+    await feuille.getByText('Une carte compte une fois, même si elle revient après une erreur.').waitFor();
+    await feuille.getByText('Les révisions en avance comptent.').waitFor();
+    await feuille.getByText("Au-delà, rien n'est exigé : tu peux continuer.").waitFor();
+    await verifierEcran(page, 'comment-on-compte');
+    await feuille.getByRole('button', { name: 'Compris' }).click();
+    await feuille.waitFor({ state: 'detached' });
     o.verifierConsole([/status of 401/]);
   } finally {
     await o.fermer();

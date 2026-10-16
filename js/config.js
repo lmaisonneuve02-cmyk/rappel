@@ -5,5 +5,5 @@ export const CLES = {
   jeton: 'rappel.jeton', gemini: 'rappel.gemini', depot: 'rappel.depot', appareil: 'rappel.appareil',
   voixNom: 'rappel.voixNom', theme: 'rappel.theme',
 };
-export const OBJECTIF_DEFAUT = 30;
-export const VERSION = '2.0.2';
+export const OBJECTIF_DEFAUT = 60;
+export const VERSION = '2.0.3';

@@ -39,7 +39,7 @@ test('mains libres : la question est lue, la réponse dictée est corrigée, le 
     await attendre(async () => (await dits()).includes('Juste.'), { message: 'verdict dit à voix haute' });
     await page.locator('.ml-verdict .verdict__mot', { hasText: 'Juste' }).waitFor();
     assert.equal(await texte(page.locator('.ml-reponse')), `« ${DICTEES[id]} »`);
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     assert.ok(o.requetesGemini.some(r => r.genre === 'correction'));
     await verifierEcran(page, 'mains-libres-verdict');
 

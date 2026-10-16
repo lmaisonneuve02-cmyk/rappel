@@ -6,7 +6,7 @@ Synthèse de trois maquettes (premier usage ; usage quotidien à une main ; conc
 
 1. **Un écran, une action principale**, en bas, sous le pouce, toujours au même endroit (Commencer, Corriger, Suivant). Son libellé dit ce qui va se passer (« Commencer · 64 cartes »).
 2. **Le clavier ne cache jamais** le champ ni le bouton principal : barre d'action fixée au-dessus du clavier (`interactive-widget=resizes-content`, et `visualViewport` pour iOS).
-3. **Dire ce que ça compte** : chaque verdict donne son effet sur le compteur (« +1 acquise : 18/30 », « Ne compte pas encore ») et quand la carte revient.
+3. **Dire ce que ça compte** : chaque verdict donne son effet sur le compteur (« +1 carte : 18/60 », « Déjà comptée aujourd'hui : 18/60 ») et quand la carte revient.
 4. **Ne jamais culpabiliser** : pas de rouge pour un jour sous l'objectif, « Je ne sais pas » donne un bandeau neutre (« Voici la réponse »).
 5. **Ce qui manque d'abord** : faux → réponse attendue en premier ; partiel → « Ce qui manquait » en premier ; juste → une ligne, détails repliés.
 6. **Jamais la couleur seule** : icône + mot pour chaque verdict, case cochée, onglet actif ; contraste AA dans les deux thèmes.
@@ -15,6 +15,16 @@ Synthèse de trois maquettes (premier usage ; usage quotidien à une main ; conc
 9. **L'irréversible en deux appuis** (« Terminer », « Arrêter », « Retirer », « Effacer »), avec ce qui sera perdu.
 10. **Pas de geste caché** : tout se fait au toucher ou au clavier (Entrée, Maj+Entrée, Ctrl+Entrée, 1-2-3, A-E, Échap) ; le retour du téléphone recule d'un pas.
 
+## Objectif du jour (règle du 16 oct. 2026)
+
+Décision explicite de l'utilisateur ; elle remplace la règle du 15 oct. (« N nouvelles cartes et toutes les révisions du jour, nouvelles cartes d'abord »). Détail : `conception.md`, § 0.
+
+- **Objectif : 60 cartes par jour** (réglage `objectifJour` ; 80 après un contrôle du mercredi sous 15/20 : l'appli lit le réglage), révisions d'abord, puis des nouvelles pour compléter.
+- Une carte compte une fois, même si elle revient après une erreur ; les révisions en avance comptent ; les QCM et les contestations ne comptent pas ; le compte repart à zéro à minuit (heure de Paris).
+- Atteint quand il y a assez de cartes **et** assez de révisions (autant que l'objectif, ou toutes celles du jour s'il y en a moins), ou quand il ne reste plus rien à proposer.
+- Jamais plus exigé : au-delà, rien n'est demandé ; « Nouvelles cartes par jour » est un plafond.
+- En-tête : « Cartes : 53/60 · Révisions : 61 » (révisions restantes, omises à 0), ✓ quand c'est atteint ; touché, il ouvre « Comment on compte ».
+
 ## Mots affichés
 
 | On écrit | Sens | Jamais |
@@ -22,7 +32,7 @@ Synthèse de trois maquettes (premier usage ; usage quotidien à une main ; conc
 | carte, paquet | une question ; les cartes d'un cours | flashcard, deck |
 | micro-fiche (fiche) | l'essentiel d'un cours | — |
 | révision, nouvelle carte | carte déjà vue qui revient ; jamais vue | review, due |
-| acquise | dernière réponse du jour juste ou partielle | validée |
+| cartes du jour | cartes distinctes répondues aujourd'hui, nouvelles et révisions (une carte compte une fois) | acquises, validées |
 | séance | — | session |
 | texte à trous, blanc | — | cloze |
 | Juste / Partiel / Faux | verdict | — |
@@ -41,8 +51,8 @@ Tutoiement, phrases courtes, verbes d'action sur les boutons. Aucun de : FSRS, S
 - **Auto-évaluation** (« Voir la réponse ») : la note (Non / En partie / Je l'avais, touches 1-2-3) passe directement à la carte suivante, avec un message bref.
 - **Verdict** : ordre selon le verdict ; « Je conteste » à côté du badge du correcteur, seulement pour Partiel ou Faux corrigés par une machine, avec clé et réseau ; objectif atteint signalé dans le verdict, sans fenêtre.
 - **Séance** : l'en-tête (compteur, état d'envoi) reste visible ; la barre « Terminer · Carte 3 sur 64 » est dessous. Fin : un seul bouton principal selon la situation (continuer, réviser en avance, QCM, retour).
-- **Aujourd'hui** : ligne d'objectif (« encore 13 : cette séance peut suffire ») ; pastilles sous « Un seul paquet ? », seulement si deux paquets ou plus ont des cartes ; sans rien à faire, « Réviser en avance » est le bouton principal tant que l'objectif n'est pas atteint.
-- **QCM** : « ils ne comptent pas dans tes cartes acquises » ; liste des cours repliée sous « Choisir un cours » ; série en plein écran ; « Valider » toujours actif (une réponse vide se note par erreurs).
+- **Aujourd'hui** : ligne d'objectif (« Objectif : encore 13 cartes (dont 5 révisions). Cette séance peut suffire. ») ; « révisions d'abord » sous les chiffres ; pastilles sous « Un seul paquet ? », seulement si deux paquets ou plus ont des cartes ; sans rien à faire, « Réviser en avance » est le bouton principal tant que l'objectif n'est pas atteint (les révisions en avance comptent).
+- **QCM** : « ils ne comptent pas dans tes cartes du jour » ; liste des cours repliée sous « Choisir un cours » ; série en plein écran ; « Valider » toujours actif (une réponse vide se note par erreurs).
 - **État d'envoi** : le message de la synchro est affiché tel quel, avec un point de couleur ; une erreur qui demande d'agir ajoute un bandeau sur Aujourd'hui avec « Ouvrir Réglages ».
 - **Réglages** : section « Apparence » (thème de l'appareil) et « Revoir les aides de découverte ».
 - **Mains libres** : présentation la première fois ; bouton Pause calme (pas rouge) ; pause automatique quand l'appli passe en arrière-plan.

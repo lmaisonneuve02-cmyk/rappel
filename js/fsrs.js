@@ -41,7 +41,7 @@ export function estDisponible(st, now) {
   return st.due < finJourParis(now);
 }
 
-// Règle de déblocage : dernière réponse du jour juste ou partielle.
+// Ancienne règle (jusqu'au 14 oct.) : dernière réponse du jour juste ou partielle.
 export function estAcquise(st, jour) {
   return !!st && jourParis(st.last) === jour && st.due - st.last > HEURE;
 }

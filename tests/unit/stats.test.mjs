@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parJour, parUE, contestationsParSemaine, lignesEffectives } from '../../js/stats.js';
-import { acquisesDuJour } from '../../js/seance.js';
+import { cartesDuJour } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
 
@@ -117,24 +117,24 @@ test('parJour : aujourd\'hui, hier (journal), jour de v1, jour vide', () => {
   });
   const r = parJour(d, T, 4);
   assert.deepStrictEqual(r, [
-    { jour: '2026-10-12', acquises: 4, reponses: 5, justes: 2, nouvelles: 2, qcm: 2, pointsQcm: 1.2 },
-    // jour de bascule : journal (7 réponses, 2 justes, 1 nouvelle) + v1 (n 5, right 5, nw 5)
-    { jour: '2026-10-11', acquises: 3, reponses: 12, justes: 7, nouvelles: 6, qcm: 1, pointsQcm: 0.5 },
-    { jour: '2026-10-10', acquises: null, reponses: 82, justes: 19, nouvelles: 0, qcm: 0, pointsQcm: 0 },
-    { jour: '2026-10-09', acquises: 0, reponses: 0, justes: 0, nouvelles: 0, qcm: 0, pointsQcm: 0 },
+    // cartes distinctes du jour : a1 (ratée puis reprise, une fois), a2, a3, a4 (fausse, compte aussi)
+    { jour: '2026-10-12', cartes: 4, reponses: 5, justes: 2, nouvelles: 2, qcm: 2, pointsQcm: 1.2 },
+    // jour de bascule : journal (7 réponses, 5 cartes, 2 justes, 1 nouvelle) + v1 (n 5, right 5, nw 5)
+    { jour: '2026-10-11', cartes: 5, reponses: 12, justes: 7, nouvelles: 6, qcm: 1, pointsQcm: 0.5 },
+    { jour: '2026-10-10', cartes: null, reponses: 82, justes: 19, nouvelles: 0, qcm: 0, pointsQcm: 0 },
+    { jour: '2026-10-09', cartes: 0, reponses: 0, justes: 0, nouvelles: 0, qcm: 0, pointsQcm: 0 },
   ]);
-  assert.equal(r[0].acquises, acquisesDuJour(d, T));   // aujourd'hui : la règle de déblocage
+  assert.equal(r[0].cartes, cartesDuJour(d, T).cartes);   // aujourd'hui : comme l'en-tête
 });
 
-test('parJour : une contestation acceptée (faux → juste) change les acquises d\'un jour passé', () => {
+test('parJour : une contestation acceptée (faux → juste) change les justes d\'un jour passé, pas les cartes', () => {
   const { reponses, srs, b2 } = journalType();
   const avant = parJour(donneesDe({ reponses, srs }), T, 2)[1];
-  assert.deepEqual([avant.acquises, avant.justes, avant.reponses], [3, 2, 7]);
+  assert.deepEqual([avant.cartes, avant.justes, avant.reponses], [5, 2, 7]);
   const apres = parJour(donneesDe({ reponses: [...reponses, contestation(b2, T - JOUR + 10 * MIN, 'juste')], srs }), T, 2)[1];
-  assert.deepEqual([apres.acquises, apres.justes, apres.reponses, apres.nouvelles], [4, 3, 7, 1]);
-  // contestation vers « partiel » : acquise aussi, mais pas juste
+  assert.deepEqual([apres.cartes, apres.justes, apres.reponses, apres.nouvelles], [5, 3, 7, 1]);
   const partiel = parJour(donneesDe({ reponses: [...reponses, contestation(b2, T - JOUR + 10 * MIN, 'partiel')], srs }), T, 2)[1];
-  assert.deepEqual([partiel.acquises, partiel.justes], [4, 2]);
+  assert.deepEqual([partiel.cartes, partiel.justes], [5, 2]);
 });
 
 test('parJour : 14 jours par défaut, du plus récent au plus ancien, sans historique', () => {
@@ -142,7 +142,7 @@ test('parJour : 14 jours par défaut, du plus récent au plus ancien, sans histo
   assert.equal(r.length, 14);
   assert.equal(r[0].jour, '2026-10-12');
   assert.equal(r[13].jour, '2026-09-29');
-  for (const j of r) assert.deepEqual([j.acquises, j.reponses, j.qcm], [0, 0, 0]);
+  for (const j of r) assert.deepEqual([j.cartes, j.reponses, j.qcm], [0, 0, 0]);
   const sansRien = { srs: {}, reponses: [], qcmJournal: [], historique: null };
   assert.equal(parJour(sansRien, T, 3).length, 3);
   assert.deepEqual(parJour(donneesDe(), T, 0), []);
@@ -152,12 +152,13 @@ test('parJour : aujourd\'hui, journal et historique de v1 s\'additionnent', () =
   const reponses = [ligne('a', T - HEURE, { nouvelle: true }), ligne('b', T - 30 * MIN, { verdict: 'faux', note: 1 })];
   const d = donneesDe({ reponses, historique: { days: { '2026-10-12': { n: 20, judged: 18, right: 9, nw: 4 } } } });
   const [auj] = parJour(d, T, 1);
-  assert.deepStrictEqual(auj, { jour: '2026-10-12', acquises: acquisesDuJour(d, T), reponses: 22, justes: 10, nouvelles: 5, qcm: 0, pointsQcm: 0 });
+  // cartes : celles du journal seulement (v1 ne donne pas le détail par carte)
+  assert.deepStrictEqual(auj, { jour: '2026-10-12', cartes: 2, reponses: 22, justes: 10, nouvelles: 5, qcm: 0, pointsQcm: 0 });
 });
 
 test('parJour : jours de v1 avec historique incomplet', () => {
   const d = donneesDe({ historique: { days: { '2026-10-11': { judged: 3 } } } });
-  assert.deepStrictEqual(parJour(d, T, 2)[1], { jour: '2026-10-11', acquises: null, reponses: 0, justes: 0, nouvelles: 0, qcm: 0, pointsQcm: 0 });
+  assert.deepStrictEqual(parJour(d, T, 2)[1], { jour: '2026-10-11', cartes: null, reponses: 0, justes: 0, nouvelles: 0, qcm: 0, pointsQcm: 0 });
 });
 
 test('parJour : jours de 25 h et 23 h', () => {

@@ -1,7 +1,7 @@
 // Séance : compteurs du jour, file (révisions puis nouvelles), fiche, pause, notes, bilan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nouvellesDuJour, acquisesDuJour, aReviser, nouvellesPossibles, Seance } from '../../js/seance.js';
+import { nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, Seance } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
 
@@ -107,18 +107,29 @@ test('nouvellesDuJour : jour de bascule, les nouvelles de v1 (historique) compte
   assert.equal(nouvellesPossibles(d2, T, 'tout').length, 0);
 });
 
-test('acquisesDuJour : dernière réponse du jour juste ou partielle, tous paquets', () => {
+test('cartesDuJour : cartes distinctes du jour, retour à +10 min compté une fois, contestation exclue', () => {
+  const minuit = z('2026-10-11T22:00:00Z');   // 00:00 le 12 à Paris
+  const rate = ligne('c1', T, { verdict: 'faux', note: 1 });
   const d = donneesDe({
-    srs: {
-      p1: { a: review(null, 3, T), b: review(null, 2, T), c: review(null, 1, T) },
-      p2: { d: review(null, 3, T - JOUR), e: review(review(null, 1, T - HEURE), 3, T) },
-      p3: {},
-    },
+    reponses: [
+      rate,                                                          // nouvelle, ratée…
+      ligne('c1', T + 10 * MIN, { nouvelle: false }),                // … revient à +10 min : une seule carte
+      ligne('r1', minuit, { nouvelle: false }),                       // révision dès minuit
+      ligne('r2', T + MIN, { nouvelle: false, verdict: 'faux', note: 1 }),   // révision ratée : compte aussi
+      ligne('r2', T + 12 * MIN, { nouvelle: false }),
+      ligne('r3', T + 2 * MIN, { nouvelle: false, paquet: 'p2' }),    // révision en avance (autre paquet)
+      ligne('c1', T + 20 * MIN, { correcteur: 'contestation', remplace: rate.id }),   // contestation : exclue
+      ligne('c9', T + 3 * MIN, { correcteur: 'contestation', remplace: 'ailleurs' }), // contestation seule : exclue
+      ligne('x1', minuit - 1, { nouvelle: false }),                   // la veille
+      ligne('x2', z('2026-10-12T22:00:00Z')),                         // le lendemain
+    ],
   });
-  assert.equal(acquisesDuJour(d, T), 3);              // a, b, e
-  assert.equal(acquisesDuJour(d, T - JOUR), 1);       // d, la veille
-  assert.equal(acquisesDuJour(donneesDe(), T), 0);
-  assert.equal(acquisesDuJour({}, T), 0);
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 4, nouvelles: 1, revisions: 3 });
+  assert.deepEqual(cartesDuJour(donneesDe(), T), { cartes: 0, nouvelles: 0, revisions: 0 });
+  assert.deepEqual(cartesDuJour({}, T), { cartes: 0, nouvelles: 0, revisions: 0 });
+  // même identifiant dans deux paquets : deux cartes
+  const d2 = donneesDe({ reponses: [ligne('a', T), ligne('a', T + MIN, { paquet: 'p2' })] });
+  assert.equal(cartesDuJour(d2, T).cartes, 2);
 });
 
 test('aReviser : cartes disponibles (dû dès minuit, +10 min après une erreur), filtre', () => {
@@ -590,30 +601,129 @@ test('corrigerVerdict : carte seule ratée (la reprise est la suivante) et carte
   assert.deepStrictEqual([s2.bilan.faites, s2.bilan.justes, s2.bilan.fausses], [3, 2, 1]);
 });
 
-test('revisionsRestantes et nouvellesDAbord (règle du 15/10)', async () => {
-  const { Seance, revisionsRestantes } = await import('../../js/seance.js');
-  const now = Date.parse('2026-10-15T20:00:00+02:00');
-  const hier = now - 86400000;
-  const donnees = {
-    paquets: { p: { id: 'p', nom: 'p', cartes: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] } }, ordre: ['p'],
-    srs: { p: { a: { last: hier - 86400000, due: hier, reps: 1, s: 1, d: 5, lapses: 0 }, b: { last: now - 3600000, due: now + 86400000, reps: 1, s: 1, d: 5, lapses: 0 } } },
-    reglages: { nouvellesParJour: 5 }, reponses: [], cartes: {},
-  };
-  assert.equal(revisionsRestantes(donnees, now), 1);
-  const s = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
-  assert.deepEqual(s.file.map(x => x.carteId), ['c', 'a']);
+// --- Objectif du jour (règle du 16/10) ---
+
+// n révisions dues (r0…), n nouvelles cartes (n0…) ; faites : lignes du jour.
+function journee({ dues = 0, nouvellesCartes = 0, revisionsFaites = 0, nouvellesFaites = 0, objectif = 60, plafond = 60 }) {
+  const cartes = [], srs = {}, reponses = [];
+  for (let i = 0; i < dues; i++) { cartes.push(carte(`r${i}`)); srs[`r${i}`] = du(i); }
+  for (let i = 0; i < revisionsFaites; i++) {
+    cartes.push(carte(`f${i}`));
+    srs[`f${i}`] = etat(T - MIN, T + 3 * JOUR);
+    reponses.push(ligne(`f${i}`, T - MIN, { nouvelle: false }));
+  }
+  for (let i = 0; i < nouvellesFaites; i++) {
+    cartes.push(carte(`v${i}`));
+    srs[`v${i}`] = etat(T - MIN, T + JOUR);
+    reponses.push(ligne(`v${i}`, T - MIN));
+  }
+  for (let i = 0; i < nouvellesCartes; i++) cartes.push(carte(`n${i}`));
+  return donneesDe({ paquets: [paquet('p1', cartes)], srs: { p1: srs }, reponses, reglages: { nouvellesParJour: plafond, objectifJour: objectif } });
+}
+
+test('objectifDuJour : 60 cartes dont des nouvelles alors que des révisions restent → pas atteint', () => {
+  const d = journee({ dues: 20, nouvellesCartes: 50, revisionsFaites: 30, nouvellesFaites: 30 });
+  const o = objectifDuJour(d, T, 60);
+  assert.deepEqual([o.cartes, o.revisionsFaites, o.revisionsRestantes, o.atteint], [60, 30, 20, false]);
+  // il faut toutes les révisions du jour (50 < 60) : encore 20 cartes, toutes des révisions
+  assert.deepEqual([o.encore, o.encoreRevisions], [20, 20]);
 });
 
-test('nouvellesDAbord : objectif de nouvelles atteint, les révisions passent avant les nouvelles en plus', async () => {
-  const { Seance } = await import('../../js/seance.js');
-  const now = Date.parse('2026-10-15T23:00:00+02:00');
-  const hier = now - 86400000;
+test('objectifDuJour : 60 révisions faites et encore 20 dues → atteint', () => {
+  const d = journee({ dues: 20, nouvellesCartes: 50, revisionsFaites: 60 });
+  const o = objectifDuJour(d, T, 60);
+  assert.deepEqual([o.cartes, o.revisionsFaites, o.revisionsRestantes, o.atteint, o.encore, o.encoreRevisions], [60, 60, 20, true, 0, 0]);
+});
+
+test('objectifDuJour : peu de révisions dues → les nouvelles complètent', () => {
+  // 10 révisions faites, aucune restante, 30 nouvelles : encore 20 cartes (aucune révision exigée)
+  const d = journee({ nouvellesCartes: 50, revisionsFaites: 10, nouvellesFaites: 30 });
+  assert.deepEqual(['cartes', 'atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(d, T, 60)[k]), [40, false, 20, 0]);
+  const d2 = journee({ nouvellesCartes: 50, revisionsFaites: 10, nouvellesFaites: 50 });
+  assert.equal(objectifDuJour(d2, T, 60).atteint, true);
+  // au-delà de l'objectif, rien de plus n'est exigé
+  const d3 = journee({ dues: 5, nouvellesCartes: 50, revisionsFaites: 70, nouvellesFaites: 10 });
+  assert.equal(objectifDuJour(d3, T, 60).atteint, true);
+  // pas assez de cartes, même avec toutes les révisions
+  const d4 = journee({ nouvellesCartes: 50, revisionsFaites: 20 });
+  assert.deepEqual(['atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(d4, T, 60)[k]), [false, 40, 0]);
+});
+
+test('objectifDuJour : rien à proposer → atteint', () => {
+  // toutes les révisions faites, plafond de nouvelles atteint : 25 cartes suffisent
+  const plafond = journee({ nouvellesCartes: 10, revisionsFaites: 10, nouvellesFaites: 15, plafond: 15 });
+  assert.deepEqual(['cartes', 'atteint', 'encore'].map(k => objectifDuJour(plafond, T, 60)[k]), [25, true, 0]);
+  // plus aucune carte jamais vue
+  const tout = journee({ revisionsFaites: 5 });
+  assert.equal(objectifDuJour(tout, T, 60).atteint, true);
+  // une révision due : il reste quelque chose
+  const reste = journee({ dues: 1, revisionsFaites: 5 });
+  assert.deepEqual(['atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(reste, T, 60)[k]), [false, 1, 1]);   // pas plus que ce qui reste
+  // deux nouvelles possibles : il reste quelque chose
+  assert.deepEqual(['atteint', 'encore', 'encoreRevisions'].map(k => objectifDuJour(journee({ nouvellesCartes: 2, revisionsFaites: 5 }), T, 60)[k]), [false, 2, 0]);
+  // sans cartes chargées (démarrage) : rien n'est atteint
+  assert.equal(objectifDuJour(donneesDe(), T, 60).atteint, false);
+});
+
+test('objectifDuJour : données réelles du 16 oct. (53 cartes dont 30 nouvelles, 61 révisions restantes)', () => {
+  const d = journee({ dues: 61, nouvellesCartes: 40, revisionsFaites: 23, nouvellesFaites: 30, plafond: 64 });
+  const o = objectifDuJour(d, T, 60);
+  assert.deepEqual([o.cartes, o.revisionsFaites, o.revisionsRestantes, o.atteint], [53, 23, 61, false]);
+  assert.deepEqual([o.encore, o.encoreRevisions], [37, 37]);   // 60 révisions dans la journée
+});
+
+test('revisionsRestantes : dues aujourd\'hui et pas encore répondues aujourd\'hui', () => {
+  const now = Date.parse('2026-10-15T20:00:00+02:00');
+  const hier = now - JOUR;
   const donnees = {
-    paquets: { p: { id: 'p', nom: 'p', cartes: [{ id: 'a' }, { id: 'c' }] } }, ordre: ['p'],
-    srs: { p: { a: { last: hier - 86400000, due: hier, reps: 1, s: 1, d: 5, lapses: 0 } } },
-    reglages: { nouvellesParJour: 64, objectifJour: 1 }, cartes: {},
-    reponses: [{ carte: 'x', nouvelle: true, ts: now - 3600000, correcteur: 'local' }],
+    srs: { p: {
+      a: { last: hier - JOUR, due: hier },                     // en retard : due
+      b: { last: now - HEURE, due: now + JOUR },               // répondue aujourd'hui
+      c: { last: hier, due: now + 2 * HEURE },                 // due ce soir
+      d: { last: hier, due: Date.parse('2026-10-16T08:00:00+02:00') },   // demain
+      e: { last: now - 5 * MIN, due: now + 5 * MIN },          // ratée aujourd'hui : revient à +10 min
+    } },
   };
-  const s = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
-  assert.deepEqual(s.file.map(x => x.carteId), ['a', 'c']);
+  assert.equal(revisionsRestantes(donnees, now), 2);
+  assert.equal(revisionsRestantes({}, now), 0);
+});
+
+test('Seance : révisions d\'abord, puis les nouvelles pour compléter, même si l\'objectif n\'est pas atteint', () => {
+  const now = Date.parse('2026-10-15T20:00:00+02:00');
+  const hier = now - JOUR;
+  const donnees = {
+    paquets: { p: { id: 'p', nom: 'p', cartes: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }] } }, ordre: ['p'],
+    srs: { p: { a: { last: hier - JOUR, due: hier, reps: 1, s: 1, d: 5, lapses: 0 }, b: { last: now - HEURE, due: now + JOUR, reps: 1, s: 1, d: 5, lapses: 0 } } },
+    reglages: { nouvellesParJour: 5, objectifJour: 60 }, reponses: [], cartes: {},
+  };
+  const s = new Seance({ donnees, maintenant: now, rnd: () => 0 });
+  assert.deepEqual(s.file.map(x => x.carteId), ['a', 'c', 'd']);
+  // l'ancienne option « nouvelles d'abord » n'existe plus : elle est ignorée
+  const s2 = new Seance({ donnees, maintenant: now, nouvellesDAbord: true, rnd: () => 0 });
+  assert.deepEqual(s2.file.map(x => x.carteId), ['a', 'c', 'd']);
+  // nouvelles jusqu'au plafond seulement (nouvellesParJour), après les révisions
+  const s3 = new Seance({ donnees: { ...donnees, reglages: { nouvellesParJour: 1, objectifJour: 60 } }, maintenant: now, rnd: () => 0 });
+  assert.deepEqual(s3.file.map(x => x.carteId), ['a', 'c']);
+});
+
+test('Seance : une carte ratée revient dans la séance et ne compte qu\'une fois', () => {
+  const d = donneesDe({ paquets: [paquet('p1', [carte('a'), carte('b')])], srs: { p1: { a: du() } }, reglages: { nouvellesParJour: 5 } });
+  const s = new Seance({ donnees: d, maintenant: T, rnd: () => 0 });
+  const verdicts = ['faux', 'juste', 'juste'];
+  let t = T;
+  const vus = [];
+  for (const verdict of verdicts) {
+    const e = s.etape();
+    assert.equal(e.type, 'carte');
+    vus.push(e.carte.id);
+    t += MIN;
+    const { ops } = s.noter({ verdict, correcteur: 'local', maintenant: t, appareil: 'test' });
+    for (const op of ops) {
+      if (op.type === 'reponse') d.reponses.push(op.ligne);
+      else (d.srs[op.paquet] ??= {})[op.carte] = op.etat;
+    }
+  }
+  assert.deepEqual(vus, ['a', 'b', 'a']);
+  assert.equal(s.etape().type, 'fin');
+  assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1 });
 });

@@ -10,6 +10,12 @@ Document de référence pour construire l'appli. Chaque module a un contrat pré
 - **Sécurité** : jamais d'`innerHTML`, `outerHTML`, `insertAdjacentHTML` ni `document.write` ; tout le DOM se construit avec `h()` (textContent). Les SVG des cartes s'affichent via `<img src="data:image/svg+xml;charset=utf-8,...">`. Les clés restent dans `localStorage` de l'appareil et ne partent que vers leur service (jeton → `api.github.com`, clé Gemini → `generativelanguage.googleapis.com`, en en-tête, jamais dans l'URL). CSP en `<meta>` dans `index.html`.
 - Langue : tout le texte visible est en français ; identifiants de code en français sans accents (comme ci-dessous).
 - Fuseau : toutes les notions de « jour » sont en heure de Paris (`Europe/Paris`), quel que soit l'appareil.
+- **Objectif du jour** (règle du 16 oct. 2026, décision explicite de l'utilisateur ; elle remplace celle du 15 oct. : « `objectifJour` nouvelles cartes et toutes les révisions du jour, nouvelles cartes d'abord ») :
+  - objectif = `objectifJour` **cartes** (réglage : 60 ; 80 après un contrôle du mercredi sous 15/20 : l'appli lit seulement le réglage) ;
+  - on compte les cartes distinctes répondues dans la journée de Paris (0 h – 23 h 59) : nouvelles et révisions, révisions en avance comprises ; une carte ratée qui revient à +10 min compte une fois ; contestations et QCM exclus ;
+  - **révisions d'abord** : la séance sert toutes les révisions dues, puis les nouvelles cartes pour compléter (jamais « nouvelles d'abord ») ;
+  - atteint si cartes ≥ objectif **et** révisions faites ≥ min(objectif, révisions faites + révisions restantes), **ou** s'il ne reste plus rien à proposer (aucune révision restante et aucune nouvelle carte possible). Révisions faites = cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'a `nouvelle: true`) ; révisions restantes = cartes dues avant la fin du jour et pas encore répondues aujourd'hui ;
+  - jamais plus exigé : au-delà, il peut continuer ; les nouvelles cartes sont proposées jusqu'à `nouvellesParJour` (un plafond, pas un objectif).
 
 ## 1. Arborescence du dépôt `rappel` (public)
 
@@ -99,7 +105,7 @@ Au plus 20 entrées par liste et par carte, sans doublon (comparaison après `no
 
 ### `progres/reglages.json`
 ```json
-{"nouvellesParJour": 15, "objectifJour": 30, "ordrePaquets": [], "baremeQcm": [1, 0.5, 0.2, 0],
+{"nouvellesParJour": 15, "objectifJour": 60, "ordrePaquets": [], "baremeQcm": [1, 0.5, 0.2, 0],
  "qcmParSeance": 8, "pauseToutes": 30, "modeles": {"correction": "", "contestation": ""},
  "voix": {"vitesse": 1, "silence": 2.5}, "maj": 0}
 ```
@@ -116,8 +122,8 @@ Valeurs par défaut dans `depot.js` (`REGLAGES_DEFAUT`), fusionnées avec le fic
 export const DEPOT_DEFAUT = {proprietaire: 'lmaisonneuve02-cmyk', depot: 'etudes', branche: 'main', racine: 'rappel/'};
 export const MODELES_DEFAUT = {correction: 'gemini-3.5-flash-lite', contestation: 'gemini-3.8-flash'};
 export const CLES = {jeton: 'rappel.jeton', gemini: 'rappel.gemini', depot: 'rappel.depot', appareil: 'rappel.appareil', voixNom: 'rappel.voixNom', theme: 'rappel.theme'};
-export const OBJECTIF_DEFAUT = 30;
-export const VERSION = '2.0.0';
+export const OBJECTIF_DEFAUT = 60;
+export const VERSION = '2.0.3';
 ```
 
 ### `js/temps.js`
@@ -144,7 +150,7 @@ export function noteDe(verdict)        // NOTES[verdict] ?? 1
 export function estDisponible(st, now) // carte en révision proposable maintenant :
    // si st.due - st.last <= HEURE (retour à +10 min après une erreur) : now >= st.due
    // sinon : st.due < finJourParis(now)  (« dû dès minuit »)
-export function estAcquise(st, jour)   // jourParis(st.last) === jour && st.due - st.last > HEURE
+export function estAcquise(st, jour)   // jourParis(st.last) === jour && st.due - st.last > HEURE (ancienne règle, jusqu'au 14 oct. ; plus utilisée par l'appli)
 export function delaiTexte(st, now)    // « revient dans 10 min » | « revient demain » | « revient dans 4 jours » | « … 2 mois »
 ```
 
@@ -274,13 +280,15 @@ Envoi : jusqu'à 5 tentatives : lire la tête et l'arbre distants ; relire les f
 
 ### `js/seance.js`
 ```js
-export function nouvellesDuJour(donnees, maintenant)   // nb de cartes distinctes avec une ligne nouvelle:true aujourd'hui
-export function acquisesDuJour(donnees, maintenant)    // nb de cartes (tous paquets) avec estAcquise(etat, jourParis(maintenant)) — la règle de déblocage
+export function nouvellesDuJour(donnees, maintenant)   // nb de cartes distinctes avec une ligne nouvelle:true aujourd'hui (+ nw de v1 ce jour-là)
+export function cartesDuJour(donnees, maintenant)      // {cartes, nouvelles, revisions} : cartes distinctes répondues aujourd'hui (contestations exclues)
+export function revisionsRestantes(donnees, maintenant)   // nb d'états avec due < fin du jour et last < début du jour
+export function objectifDuJour(donnees, maintenant, objectif)   // {objectif, cartes, revisionsFaites, revisionsRestantes, atteint, encore, encoreRevisions} — l'objectif du jour (§ 0)
 export function aReviser(donnees, maintenant, filtre)  // [{paquet, carteId}] disponibles (estDisponible), filtre = 'tout' | paquetId
 export function nouvellesPossibles(donnees, maintenant, filtre)  // [{paquet, carteId}] sans état, dans l'ordre donnees.ordre puis l'ordre du fichier, limitées à max(0, nouvellesParJour - nouvellesDuJour)
 export class Seance {
   constructor({donnees, maintenant, filtre = 'tout', enAvance = false, rnd = Math.random})
-  // file : révisions mélangées (en évitant deux cartes de la même fiche à la suite), puis nouvelles cartes paquet par paquet
+  // file : révisions mélangées (en évitant deux cartes de la même fiche à la suite), puis nouvelles cartes paquet par paquet (révisions d'abord, toujours)
   etape()        // {type:'fiche', ficheId, paquet} avant la 1re nouvelle carte d'une fiche pas encore montrée dans la séance
                  // {type:'pause', faites, minutes} quand faites >= pauseA (réglage pauseToutes)
                  // {type:'carte', paquet, carte, etat, nouvelle, rang, total, restantes}
@@ -312,9 +320,9 @@ export function ligneQcm({qcm, cochees, resultat, duree, maintenant, appareil}) 
 
 ### `js/stats.js`
 ```js
-export function parJour(donnees, maintenant, n = 14)   // [{jour, acquises, reponses, justes, nouvelles, qcm, pointsQcm}] du plus récent au plus ancien ;
-   // jours antérieurs au journal : historique-v1 (n → reponses, right → justes, nw → nouvelles, acquises null) ;
-   // acquises d'un jour passé = cartes dont la dernière réponse du jour est juste ou partielle (contestations appliquées) ; aujourd'hui = acquisesDuJour
+export function parJour(donnees, maintenant, n = 14)   // [{jour, cartes, reponses, justes, nouvelles, qcm, pointsQcm}] du plus récent au plus ancien ;
+   // jours antérieurs au journal : historique-v1 (n → reponses, right → justes, nw → nouvelles, cartes null) ;
+   // cartes = cartesDuJour(...).cartes (cartes distinctes du jour, comparées à l'objectif dans le suivi)
 export function parUE(donnees, maintenant)   // [{ue, nom, coursTotal, coursEnCartes, cartes, cartesVues, retention7j (0..1|null), moyenneQcm (0..1|null)}]
 export function contestationsParSemaine(donnees)  // [{semaine: 'AAAA-Snn', contestations, acceptees, reponses}]
 export function lignesEffectives(reponses)   // applique les contestations (remplace) → lignes à compter
@@ -355,23 +363,24 @@ Déroulé d'une carte : dire la question (`texteOral`) → écouter → si comma
 ## 4. Interface
 
 ### Coquille (`index.html`, `js/app.js`, `js/ui/commun.js`)
-- En-tête collant : nom « Rappel », **compteur « Acquises : X/30 »** (barre fine qui se remplit ; à 30 : ✓ et couleur de réussite), état de synchro en mots courts (« Enregistré », « 3 réponses en attente d'envoi », « Hors ligne : tout est gardé sur l'appareil », « Sans lien avec tes données »), cliquable → détail dans Réglages.
+- En-tête collant : nom « Rappel », **compteur « Cartes : X/60 · Révisions : R »** (R = révisions restantes, omis à 0 ; barre fine qui se remplit ; objectif atteint : ✓ et couleur de réussite ; touché : feuille « Comment on compte »), état de synchro en mots courts (« Enregistré », « 3 réponses en attente d'envoi », « Hors ligne : tout est gardé sur l'appareil », « Sans lien avec tes données »), cliquable → détail dans Réglages.
 - Barre d'onglets en bas (4) : **Aujourd'hui**, **QCM**, **Suivi**, **Réglages**. Pendant une séance, la barre d'onglets est masquée (plein écran, bouton « Terminer » en haut).
 - `commun.js` exporte : `h(tag, attrs, ...enfants)` (attrs : `class`, `text`, `on<Evenement>`, `aria-*`, `data-*`, `hidden`, `disabled`, `value`, `type`, `for`, `id`, `role`, `tabindex`, `placeholder`, `href`, `target`, `rel`, `src`, `alt`, `title`, `name`, `checked`, `min`, `max`, `step` ; enfants : chaînes → nœuds texte, null/false ignorés, tableaux aplatis), `$(id)`, `toast(message)`, `bouton(libelle, {principal, discret, onClick, icone})`, `ficheNoeud(fiche)`, `ouvrirFiche(fiche)` (surimpression plein écran, fermeture par bouton et Échap), `verdictNoeud(resultat)`, `pastilles(options, actif, onChoix)`, `icone(nom)` (SVG construits par `document.createElementNS`, pas de chaîne HTML).
-- Contexte partagé passé à chaque écran : `ctx = {sync, donnees(), reglages(), cles(), aller(vue, params), toast, appareil, maintenant(), idf()}`.
+- Contexte partagé passé à chaque écran : `ctx = {sync, donnees(), reglages(), cles(), aller(vue, params), toast, appareil, maintenant(), idf(), objectif(), jour(), cartes(), atteint()}` (`jour()` = `objectifDuJour`, voir § 0).
 
 ### Premiers pas (`ui/accueil.js`) — si aucun jeton enregistré
 Carte de bienvenue en 3 étapes numérotées, chacune avec une phrase d'explication, un lien direct et un champ :
 1. « Relier tes cartes » : jeton GitHub (lien vers la page de création de jeton à accès fin, avec la marche à suivre en 4 lignes) → bouton « Vérifier » (appelle `verifier()` ; message clair si refusé).
 2. « Correction intelligente (facultatif) » : clé Gemini (lien AI Studio, 3 lignes) → « Vérifier ». Sans clé : « La correction se fera sur ton appareil, plus stricte. Tu pourras ajouter la clé plus tard dans Réglages. »
-3. « C'est parti » : résumé de ce qui va se passer (« Chaque jour : tes révisions, puis tes nouvelles cartes. Objectif : 30 cartes acquises. ») → bouton « Commencer ».
+3. « C'est parti » : résumé de ce qui va se passer (« Chaque jour : tes révisions d'abord, puis tes nouvelles cartes. », « Objectif : 60 cartes par jour : tes révisions d'abord, puis des nouvelles pour compléter. ») → bouton « Commencer ».
 L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, rien à réviser ; l'écran explique pourquoi.
 
 ### Aujourd'hui (`ui/aujourdhui.js`)
 - Bloc principal : « Ta séance du jour » ; chiffres « X révisions · Y nouvelles cartes · environ Z min » (Z ≈ 0,6 min par carte) ; **grand bouton « Commencer »** ; dessous, bouton secondaire « Mains libres » (icône casque) avec une ligne d'explication (« Je lis les questions, tu réponds à voix haute »), masqué si la reconnaissance vocale manque (remplacé par une note sur le micro du clavier).
 - Pastilles des paquets (défilement horizontal) : « Tout » + un paquet par pastille avec son nombre de cartes du jour.
 - Rien à faire : « Tout est fait pour aujourd'hui » + boutons « Faire des QCM » et « Réviser en avance ».
-- Objectif atteint : bandeau de réussite (« 30 cartes acquises : objectif du jour atteint. Tu peux t'arrêter ou continuer. »).
+- Ligne d'objectif : « Objectif : encore 12 cartes (dont 5 révisions). Cette séance peut suffire. » (jamais plus que ce qui reste à proposer).
+- Objectif atteint : bandeau de réussite (« 60 cartes aujourd'hui : objectif du jour atteint. Tu peux t'arrêter ou continuer. »).
 
 ### Séance (`ui/seance.js`)
 - Haut : barre de progression fine, « Carte 3 sur 64 », bouton « Terminer » (deux appuis pour confirmer).
@@ -379,7 +388,7 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 - Carte : étiquette (« Révision » / « Nouvelle »), nom du paquet, question en grand (serif), consigne courte selon le type (« Une réponse précise. », « Complète les blancs, dans l'ordre. », « Explique le mécanisme. »), champ de réponse large, **bouton micro** rond dans le champ (texte affiché en direct ; état « J'écoute… » visible ; arrêt au bouton ou après le silence), bouton principal « Corriger » (Ctrl+Entrée), boutons secondaires « Je ne sais pas » et « Voir la réponse » (champ vide : montre la réponse et trois boutons « Je l'avais » / « En partie » / « Non » → correcteur `auto`).
 - Pendant la correction : « Correction… » (indicateur), pas plus de 15 s.
 - Verdict : bandeau coloré avec icône (Juste / Partiel / Faux), « revient dans 4 jours », listes « Ce que tu as dit de juste », « Ce qui manquait », « Erreur » ; explication ; « Réponse attendue » ; lien « Voir la fiche : <titre> » ; badge du correcteur (« Corrigé par Gemini », « Corrigé sur l'appareil », « Corrigé hors ligne », « Reconnu (déjà accepté) ») ; **bouton principal « Suivant »** (Entrée) ; lien discret « Je conteste » en bas → zone « Dis pourquoi (facultatif) » + micro + « Envoyer » → second avis → message « Tu avais raison : verdict corrigé » ou l'explication.
-- Pause à 30 cartes faites (comme v1) ; à 30 acquises : message de réussite une fois.
+- Pause à 30 cartes faites (comme v1) ; objectif du jour atteint : message de réussite une fois. Chaque verdict dit son effet (« +1 carte : 18/60 », « Déjà comptée aujourd'hui : 18/60 »).
 - Fin : bilan (réponses, justes, durée), fiches à relire, bouton « Faire N QCM » si des QCM sont proposables, sinon « Retour ». Envoi des données à la fin.
 
 ### QCM (`ui/qcm.js`)
@@ -388,8 +397,8 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 - Barème expliqué en une ligne (« 0 erreur = 1 point, 1 = 0,5, 2 = 0,2, 3 ou plus = 0 »).
 
 ### Suivi (`ui/suivi.js`)
-- Aujourd'hui : acquises / objectif, réponses, justes, nouvelles, points QCM.
-- 14 derniers jours : barres simples (acquises ; repli sur réponses pour les jours de v1) avec chiffres.
+- Aujourd'hui : cartes du jour / objectif, réponses, justes, nouvelles, points QCM.
+- 14 derniers jours : barres simples (cartes distinctes du jour comparées à l'objectif ; repli sur réponses pour les jours de v1) avec chiffres.
 - Par UE : couverture (cours en cartes / cours du plan), rétention sur 7 jours, moyenne aux QCM.
 - Correction : contestations par semaine (et acceptées).
 - « Comment ça marche » (dépliable) : 6 phrases simples (rappel actif, espacement, correction, objectif, mains libres, synchro).
@@ -398,7 +407,7 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 Sections : **Mes clés** (jeton GitHub, clé Gemini : champ masqué + « Vérifier » + « Retirer » ; rappel : « gardées seulement sur cet appareil ») ; **Rythme** (nouvelles cartes par jour, objectif, ordre des paquets avec flèches monter/descendre) ; **QCM** (QCM par séance, barème : 4 nombres) ; **Voix** (voix française, vitesse avec bouton « Écouter », silence avant correction en secondes) ; **Correction** (modèles Gemini, avancé ; bouton « Tester la correction » → § 9) ; **Données** (état de synchro détaillé, « Envoyer maintenant », nom de l'appareil, dépôt avancé, « Effacer les données de cet appareil » avec confirmation) ; version.
 
 ### Mains libres (`ui/mainslibres.js`)
-Plein écran sombre et calme : grand indicateur d'état (« Je lis la question… », « Je t'écoute… » avec onde animée, « Correction… », verdict), texte de la question et de ta réponse en direct, compteur « Acquises X/30 », boutons très grands « Pause » / « Reprendre » et « Arrêter », aide-mémoire des commandes vocales toujours visible (« je ne sais pas · répète · suivant · pause · je conteste »). Écran maintenu allumé.
+Plein écran sombre et calme : grand indicateur d'état (« Je lis la question… », « Je t'écoute… » avec onde animée, « Correction… », verdict), texte de la question et de ta réponse en direct, compteur « Cartes : X/60 » de l'en-tête, « X/60 cartes aujourd'hui » au bilan, boutons très grands « Pause » / « Reprendre » et « Arrêter », aide-mémoire des commandes vocales toujours visible (« je ne sais pas · répète · suivant · pause · je conteste »). Écran maintenu allumé.
 
 ### Apparence (`style.css`)
 Identité des micro-fiches : fond « papier d'ECG » (quadrillage fin), rouge artériel (accent principal, action), bleu veineux (secondaire, information), encre sombre ; polices Newsreader (titres, questions), Atkinson Hyperlegible (texte, interface), IBM Plex Mono (chiffres, compteurs). Variables CSS sur `:root`, thème sombre via `@media (prefers-color-scheme: dark)` et `[data-theme]`. Verdicts : juste = vert sobre, partiel = ambre, faux = rouge ; jamais la couleur seule (icône + mot). Mobile d'abord (≤ 480 px), centrage max 680 px sur PC, aucune barre de défilement horizontale, `env(safe-area-inset-*)` respecté.
@@ -408,7 +417,7 @@ Identité des micro-fiches : fond « papier d'ECG » (quadrillage fin), rouge ar
 - `manifest.webmanifest` : `name` « Rappel », `short_name` « Rappel », `start_url` « ./ », `scope` « ./ », `display` « standalone », couleurs du thème, icônes 192, 512, maskable 512.
 
 ## 6. Tests
-- Unitaires (`node --test tests/unit/*.test.mjs`) : FSRS identique à v1 (fixture `tests/fixtures/fsrs-v1.json` générée depuis le code de v1), temps de Paris (changements d'heure), « dû dès minuit » et retour à +10 min, ordre de séance, limite de nouvelles cartes, fiche avant la 1re nouvelle carte, compteur d'acquises, correcteur local (réponses attendues justes, fautes, accents, abréviations, paraphrases, pièges refusés, antonymes), Gemini (corps de requête, schéma, analyse, erreurs, avec `fetch` simulé), GitHub (chemins, écriture, conflit avec `fetch` simulé), fusion, ops, synchro (conflit entre deux appareils simulés), QCM (barème, échéances 2 j / 7 j, choix), stats, voix (commandes, lettres, Ecoute avec reconnaissance simulée, doublons Android), mains libres (machine à états avec dépendances simulées).
+- Unitaires (`node --test tests/unit/*.test.mjs`) : FSRS identique à v1 (fixture `tests/fixtures/fsrs-v1.json` générée depuis le code de v1), temps de Paris (changements d'heure), « dû dès minuit » et retour à +10 min, ordre de séance, limite de nouvelles cartes, fiche avant la 1re nouvelle carte, cartes du jour et objectif du jour, correcteur local (réponses attendues justes, fautes, accents, abréviations, paraphrases, pièges refusés, antonymes), Gemini (corps de requête, schéma, analyse, erreurs, avec `fetch` simulé), GitHub (chemins, écriture, conflit avec `fetch` simulé), fusion, ops, synchro (conflit entre deux appareils simulés), QCM (barème, échéances 2 j / 7 j, choix), stats, voix (commandes, lettres, Ecoute avec reconnaissance simulée, doublons Android), mains libres (machine à états avec dépendances simulées).
 - E2E (`node --test tests/e2e/*.test.mjs`, Playwright, Chromium de `/opt/pw-browsers`) : serveur statique local ; `api.github.com` simulé par un faux dépôt en mémoire (`tests/e2e/faux-github.mjs`), Gemini simulé, reconnaissance et synthèse vocales simulées (`addInitScript`) ; vue téléphone 390×844 et PC 1280×800 ; thèmes clair et sombre ; scénarios : premiers pas, séance complète (révisions puis fiche puis nouvelles cartes, compteur, envoi groupé en un commit), correction hors ligne, contestation, QCM, mains libres, hors ligne via service worker ; captures dans `tests/e2e/captures/` (ignorées par git) ; aucune erreur console ; aucun débordement horizontal.
 - `outils/verifier-donnees.mjs <dossier rappel/>` : schémas, unicité des ids, barèmes (≥ 2 formulations par idée, réponse attendue jugée juste par `corrigerLocal`), QCM (5 propositions A-E, ≥ 1 vraie, explications), plan (paquets et fiches référencés existants).
 

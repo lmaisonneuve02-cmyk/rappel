@@ -71,7 +71,7 @@ test('hors ligne : l\'appli s\'ouvre sans réseau, la réponse est gardée puis 
     await page.locator('.badge', { hasText: 'Corrigé hors ligne' }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     assert.equal(o.requetesGemini.length, 0, 'Gemini n\'est pas appelé hors ligne');
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     await verifierEcran(page, 'hors-ligne-verdict');
 
     await page.locator('.seance-haut .btn').first().click();
@@ -84,7 +84,7 @@ test('hors ligne : l\'appli s\'ouvre sans réseau, la réponse est gardée puis 
     // L'appli fermée puis rouverte sans réseau : la réponse est toujours là.
     await page.reload();
     await bloc();
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
 
     // Retour du réseau : envoi automatique.
     await o.horsLigne(false);

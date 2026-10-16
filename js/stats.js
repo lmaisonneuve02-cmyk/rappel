@@ -2,7 +2,7 @@
 // Module pur : aucun accès au DOM.
 import { noteDe } from './fsrs.js';
 import { HEURE, JOUR, jourParis, debutJourParis, finJourParis, decalerJour } from './temps.js';
-import { acquisesDuJour, nouvellesDuJour } from './seance.js';
+import { cartesDuJour, nouvellesDuJour } from './seance.js';
 
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 const reussie = l => l.verdict === 'juste' || l.verdict === 'partiel';
@@ -66,15 +66,6 @@ export function lignesEffectives(reponses) {
     });
 }
 
-// Cartes dont la dernière réponse du jour est juste ou partielle (lignes déjà triées par ts).
-function acquisesDesLignes(lignes) {
-  const derniere = new Map();
-  for (const l of lignes) derniere.set(l.paquet + '/' + l.carte, l);
-  let n = 0;
-  for (const l of derniere.values()) if (reussie(l)) n++;
-  return n;
-}
-
 export function parJour(donnees, maintenant, n = 14) {
   const lignes = lignesEffectives(donnees.reponses);
   const journalQcm = donnees.qcmJournal || [];
@@ -86,15 +77,15 @@ export function parJour(donnees, maintenant, n = 14) {
     const duJour = lignes.filter(l => l.ts >= debut && l.ts < fin);
     const qcm = journalQcm.filter(l => l.ts >= debut && l.ts < fin);
     const entree = {
-      jour, acquises: 0, reponses: 0, justes: 0, nouvelles: 0,
+      jour, cartes: 0, reponses: 0, justes: 0, nouvelles: 0,
       qcm: qcm.length, pointsQcm: arrondi(qcm.reduce((s, l) => s + (Number(l.points) || 0), 0)),
     };
     if (duJour.length) {
       entree.reponses = duJour.length;
       entree.justes = duJour.filter(l => l.verdict === 'juste').length;
-      entree.acquises = acquisesDesLignes(duJour);
+      entree.cartes = cartesDuJour(donnees, t).cartes;   // cartes distinctes du jour (règle du 16/10)
     } else if (histo[jour]) {
-      entree.acquises = null;   // jour de Rappel v1 seul : pas de détail par carte
+      entree.cartes = null;   // jour de Rappel v1 seul : pas de détail par carte
     }
     // Jour de bascule : v1 (historique) et v2 (journal) s'additionnent.
     const h = histo[jour];
@@ -103,7 +94,6 @@ export function parJour(donnees, maintenant, n = 14) {
       entree.justes += entier(h.right);
     }
     entree.nouvelles = nouvellesDuJour(donnees, t);   // journal + historique (nw)
-    if (k === 0) entree.acquises = acquisesDuJour(donnees, maintenant);
     res.push(entree);
     t = debut - 1;   // un instant de la veille
   }

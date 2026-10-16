@@ -103,8 +103,8 @@ export function creer(ctx, params = {}) {
       h('h1', { class: 'titre-page', tabindex: '-1', text: d.phase === 'erreur' ? 'Mains libres arrêté' : 'Séance terminée' }),
       d.phase === 'erreur' ? h('p', { class: 'chapeau', text: d.message }) : null,
       h('div', { class: 'grand-compteur' },
-        h('p', { class: 'grand-compteur__chiffre', text: `${ctx.acquises()}/${ctx.objectif()}` }),
-        h('p', { class: 'grand-compteur__texte', text: "acquises aujourd'hui" })),
+        h('p', { class: 'grand-compteur__chiffre', text: `${ctx.cartes()}/${ctx.objectif()}` }),
+        h('p', { class: 'grand-compteur__texte', text: "cartes aujourd'hui" })),
       h('p', { class: 'chiffres chiffres--doux', text: [nb(b.reponses || b.faites || 0, 'réponse'), b.justes && nb(b.justes, 'juste'),
         b.partielles && nb(b.partielles, 'partielle'), b.fausses && nb(b.fausses, 'fausse')].filter(Boolean).join(' · ') }));
     vider(barre, bouton('Retour', { principal: true, onClick: () => ctx.aller('aujourdhui') }));
@@ -117,7 +117,7 @@ export function creer(ctx, params = {}) {
     compterAide('mainslibres');
     const donnees = ctx.donnees();
     const r = ctx.reglages();
-    const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', nouvellesDAbord: true });
+    const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout' });
     parole = new Parole({ vitesse: Number(r.voix?.vitesse) || 1, voixNom: lireLocal(CLES.voixNom, '') });
     ecoute = new Ecoute({ silence: Math.round((Number(r.voix?.silence) || 2.5) * 1000) });
     ml = new MainsLibres({

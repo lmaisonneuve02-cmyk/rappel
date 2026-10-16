@@ -23,7 +23,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
     await page.locator('.page--aujourdhui .bloc-seance').waitFor();
     await page.locator('.onglet[data-vue="qcm"]').click();
     await page.getByRole('heading', { name: 'QCM', exact: true }).waitFor();
-    await page.getByText('Ils ne comptent pas dans tes cartes acquises', { exact: false }).waitFor();
+    await page.getByText('Ils ne comptent pas dans tes cartes du jour', { exact: false }).waitFor();
     await page.getByText('3 questions · environ 3 min').waitFor();
     await page.getByText(/^Barème\s: 0 erreur = 1 point · 1 = 0,4 · 2 = 0,1 · 3 ou plus = 0\./).waitFor();
     await verifierEcran(page, 'qcm-accueil');
@@ -61,7 +61,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
     await page.getByText('2 QCM ratés : ils reviendront dans 2 jours.').waitFor();
     await verifierEcran(page, 'qcm-bilan');
     await attendre(() => faux.commits().length === 2, { message: 'envoi du journal des QCM' });
-    assert.equal(await compteur(page), 'Nouvelles : 0/30 · Révisions : 2');
+    assert.equal(await compteur(page), 'Cartes : 0/30 · Révisions : 2');
 
     const commit = faux.commits()[1];
     assert.match(commit.message, /^Rappel : mise à jour du \d\d\/\d\d$/);

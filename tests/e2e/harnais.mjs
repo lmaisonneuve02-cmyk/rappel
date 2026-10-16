@@ -252,10 +252,10 @@ export async function verifierEcran(page, nom) {
 
 export const clic = (page, nom) => page.getByRole('button', { name: nom, exact: true }).first().click();
 
-// Texte d'un élément, espaces insécables (typographie française : « Acquises : », « … ») ramenées à des espaces.
+// Texte d'un élément, espaces insécables (typographie française : « Cartes : », « … ») ramenées à des espaces.
 export const texte = async cible => (await cible.textContent())?.replace(/\u00a0/g, ' ') ?? null;
 
-// Texte de l'en-tête « Acquises : X/30 ».
+// Texte de l'en-tête « Cartes : X/30 · Révisions : R ».
 export const compteur = page => texte(page.locator('#compteur-texte'));
 
 // Fichiers du faux dépôt (JSON / JSONL analysés).

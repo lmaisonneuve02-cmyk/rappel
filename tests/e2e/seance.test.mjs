@@ -1,5 +1,5 @@
 // Séance : révisions, micro-fiche, nouvelles cartes ; Gemini simulé (juste, partiel), « je ne sais pas »,
-// compteur d'acquises, envoi groupé en un commit ; Gemini en erreur (429) ; contestation acceptée.
+// compteur de cartes du jour, envoi groupé en un commit ; Gemini en erreur (429) ; contestation acceptée.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { estAcquise } from '../../js/fsrs.js';
@@ -70,9 +70,9 @@ async function seanceComplete(theme) {
     await verifierEcran(page, nom('carte'));
     await repondre(page, REPONSES[r1.id]);
     assert.equal(await mot(page), 'Juste');
-    assert.equal(await effet(page), '+1 acquise : 1/30');
+    assert.equal(await effet(page), '+1 carte : 1/30');
     await page.locator('.badge', { hasText: 'Corrigé par Gemini' }).waitFor();
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     await verifierEcran(page, nom('verdict-juste'));
     if (theme === 'clair') {
       // « Rappel · … » dans l'en-tête : une feuille d'information, la séance continue.
@@ -95,10 +95,10 @@ async function seanceComplete(theme) {
     assert.notEqual(r2.id, r1.id);
     await repondre(page, PARTIEL);
     assert.equal(await mot(page), 'Partiel');
-    assert.equal(await effet(page), '+1 acquise : 2/30');
+    assert.equal(await effet(page), '+1 carte : 2/30');
     await page.getByRole('heading', { name: 'Ce qui manquait' }).waitFor();
     await page.getByRole('button', { name: 'Je conteste' }).waitFor();
-    assert.equal(await compteur(page), 'Acquises : 2/30');
+    assert.equal(await compteur(page), 'Cartes : 2/30');
     await verifierEcran(page, nom('verdict-partiel'));
     await suivant(page);
 
@@ -120,19 +120,22 @@ async function seanceComplete(theme) {
     assert.equal(await mot(page), 'Voici la réponse');
     assert.equal(await texte(page.locator('.page--seance .verdict__ligne')), 'Pas grave. Revient un peu plus loin dans la séance.');
     await page.locator('.attendue', { hasText: 'Le vert.' }).waitFor();
-    assert.equal(await compteur(page), 'Acquises : 2/30');
+    // « Je ne sais pas » : la carte est répondue, elle compte (une fois, même quand elle revient).
+    assert.equal(await effet(page), '+1 carte : 3/30');
+    assert.equal(await compteur(page), 'Cartes : 3/30');
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     await verifierEcran(page, nom('verdict-nsp'));
     await suivant(page);
 
-    // 5) et 6) Nouvelles cartes justes
-    for (const [id, rang, total, n] of [['col-02', 4, 6, 3], ['col-03', 5, 6, 4]]) {
+    // 5) et 6) Nouvelles cartes justes ; après la dernière, plus rien à proposer : objectif atteint.
+    for (const [id, rang, total, n] of [['col-02', 4, 6, 4], ['col-03', 5, 6, 5]]) {
       await page.locator('#reponse').waitFor();
       assert.equal(await position(page), `Carte ${rang} sur ${total}`);
       assert.equal((await question(page)).id, id);
       await repondre(page, REPONSES[id]);
       assert.equal(await mot(page), 'Juste');
-      assert.equal(await effet(page), `+1 acquise : ${n}/30`);
+      assert.equal(await effet(page), `+1 carte : ${n}/30`);
+      if (id === 'col-03') await page.getByText("Objectif du jour atteint : 5 cartes aujourd'hui. Tu peux t'arrêter ou continuer.").waitFor();
       await suivant(page);
     }
 
@@ -142,8 +145,8 @@ async function seanceComplete(theme) {
     await page.locator('.puce', { hasText: 'Encore une fois' }).waitFor();
     assert.equal((await question(page)).id, 'col-01');
     await repondre(page, REPONSES['col-01']);
-    assert.equal(await effet(page), '+1 acquise : 5/30');
-    assert.equal(await compteur(page), 'Acquises : 5/30');
+    assert.equal(await effet(page), "Déjà comptée aujourd'hui : 5/30");
+    assert.equal(await compteur(page), 'Cartes : 5/30 ✓');
     assert.equal(faux.commits().length, 1, 'rien ne part avant la fin de la séance');
     await suivant(page);
 
@@ -181,15 +184,17 @@ async function seanceComplete(theme) {
     assert.equal(srs['col-01'].reps, 2);
     assert.equal(srs['col-01'].lapses, 0);   // comme v1 : une nouvelle carte ratée n'est pas un oubli
 
-    // Un seul bouton principal selon la situation, puis retour à l'écran du jour.
-    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Réviser en avance');
-    await page.getByRole('button', { name: 'Faire 3 QCM' }).waitFor();
+    // Un seul bouton principal selon la situation (objectif atteint : les QCM), puis retour à l'écran du jour.
+    await page.getByText("Objectif du jour atteint. Tu peux t'arrêter là.").waitFor();
+    assert.equal(await texte(page.locator('.barre-action .btn--principal')), 'Faire 3 QCM');
+    await page.getByRole('button', { name: 'Retour' }).waitFor();
     await page.locator('.onglet[data-vue="aujourdhui"]').waitFor({ state: 'hidden' });
     await page.goBack();
     await page.locator('.page--aujourdhui').waitFor();
     await page.getByText("Tout est fait pour aujourd'hui").waitFor();
     await page.getByText('Les 3 nouvelles cartes du jour sont faites. Tu peux en demander plus dans Réglages.').waitFor();
-    assert.equal(await compteur(page), 'Acquises : 5/30');
+    await page.getByText('Plus rien à proposer aujourd\'hui : objectif du jour atteint.').waitFor();
+    assert.equal(await compteur(page), 'Cartes : 5/30 ✓');
     await verifierEcran(page, nom('apres'));
     o.verifierConsole();
   } finally {
@@ -221,7 +226,7 @@ test('Gemini en erreur (429) : correction sur l\'appareil, mention hors ligne', 
     const [boiteToast, barre] = [await toast.boundingBox(), await page.locator('.seance-haut').boundingBox()];
     assert.ok(boiteToast.y >= barre.y + barre.height, `le message (haut ${boiteToast.y}) passe sous la barre de séance (bas ${barre.y + barre.height})`);
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     await verifierEcran(page, 'gemini-429-verdict');
     assert.equal(o.requetesGemini.filter(r => r.genre === 'correction').length, 1, 'pas de nouvel essai sur un quota');
 
@@ -247,7 +252,7 @@ test('contestation acceptée : verdict corrigé, la carte ne revient pas, ligne 
     const r1 = await question(page);
     await repondre(page, FAUX_CONTESTE);
     assert.equal(await mot(page), 'Faux');
-    assert.equal(await effet(page), 'Ne compte pas encore : réussis-la quand elle revient.');
+    assert.equal(await effet(page), '+1 carte : 1/30');   // répondue : elle compte, même fausse
     assert.equal(await texte(page.locator('.page--seance .verdict__ligne')), 'Revient un peu plus loin dans la séance.');
     await clic(page, 'Je conteste');
     await page.fill('#raison', 'même sens : tous les côtés égaux');
@@ -256,8 +261,8 @@ test('contestation acceptée : verdict corrigé, la carte ne revient pas, ligne 
     await page.getByText('Tu avais raison : verdict corrigé en « Juste ».').waitFor();
     assert.equal(await mot(page), 'Juste');
     await page.locator('.badge', { hasText: 'Corrigé après un second avis' }).waitFor();
-    assert.equal(await effet(page), '+1 acquise : 1/30');
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await effet(page), '+1 carte : 1/30');   // la contestation ne compte pas en plus
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     await verifierEcran(page, 'contestation-acceptee');
     assert.deepEqual(o.requetesGemini.map(r => r.genre), ['correction', 'contestation']);
@@ -293,7 +298,7 @@ test('« Voir la réponse » : il se note lui-même (Je l\'avais / En partie / N
     await page.goto(serveur.base);
     await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 5 cartes' }).click();
     const vus = [];
-    for (const [choix, verdict, compte] of [["Je l'avais", 'juste', 1], ['En partie', 'partiel', 2], ['Non', 'faux', 2]]) {
+    for (const [choix, verdict, compte] of [["Je l'avais", 'juste', 'Cartes : 1/30 · Révisions : 1'], ['En partie', 'partiel', 'Cartes : 2/30'], ['Non', 'faux', 'Cartes : 3/30']]) {
       await page.locator('#reponse').waitFor();
       const c = await question(page);
       vus.push([c.id, verdict]);
@@ -308,7 +313,7 @@ test('« Voir la réponse » : il se note lui-même (Je l\'avais / En partie / N
       if (vus.length === 1) await verifierEcran(page, 'auto-evaluation');
       await clic(page, choix);
       await page.locator('#toast', { hasText: `Noté : ${verdict === 'juste' ? 'juste' : verdict === 'partiel' ? 'partiel' : 'faux'}` }).waitFor();
-      assert.equal(await compteur(page), `Acquises : ${compte}/30`);
+      assert.equal(await compteur(page), compte);
       // Après les deux révisions vient la micro-fiche.
       if (vus.length === 2) await clic(page, "J'ai lu, on y va");
     }
@@ -342,7 +347,7 @@ test('« Terminer » pendant la correction : la séance reste terminée et la r�
     assert.equal(await page.locator('.page--seance .verdict').count(), 0);
     await page.locator('.chiffres--doux', { hasText: /^1 réponse · 1 juste · / }).waitFor();
     await page.getByRole('button', { name: 'Continuer · 4 cartes' }).waitFor();
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     await attendre(() => {
       const l = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
       return l?.length === 1 && l[0].carte === r1.id;
@@ -381,7 +386,7 @@ test('« Suivant » pendant le second avis : on reste sur la carte suivante, l\'
     assert.equal(await page.locator('#reponse').count(), 1, 'la carte suivante reste affichée');
     assert.equal((await question(page)).id, r2.id);
     assert.equal(await position(page), 'Carte 2 sur 5');
-    assert.equal(await compteur(page), 'Acquises : 1/30');
+    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
     await verifierEcran(page, 'suivant-pendant-second-avis');
     await terminerSeance(page);
     assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste · \d+ min$/);

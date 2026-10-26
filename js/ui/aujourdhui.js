@@ -1,6 +1,7 @@
 // Aujourd'hui : ta séance du jour (révisions puis nouvelles cartes), un seul grand bouton.
 import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour, qcmRestants, QCM_MAX } from '../seance.js';
 import { qcmProposables } from '../qcm.js';
+import { feuillesDeLaSemaine } from '../feuille.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
 import { reconnaissanceDisponible } from '../voix.js';
@@ -197,6 +198,12 @@ export function creer(ctx, params = {}) {
           ? `Jour sans élan ? Choisis parmi 4 réponses. Compte « partiel », ${QCM_MAX} cartes au plus par jour (encore ${resteQcm}).`
           : `QCM rapide : ${QCM_MAX} cartes aujourd'hui, c'est le plafond. La suite en écrivant.` })));
     }
+    // Feuille blanche (26 oct.) : 10 par semaine au moins.
+    const objFeuilles = Number(d.reglages.feuillesSemaine) || 0;
+    const fs = feuillesDeLaSemaine(d, now, objFeuilles || 10);
+    blocs.push(h('div', { class: 'mains-libres-entree' },
+      bouton(`Feuille blanche${objFeuilles ? ` (${fs.faites}/${objFeuilles})` : ''}`, { icone: 'fiche', classe: 'btn--large', onClick: () => ctx.aller('feuille') }),
+      h('p', { class: 'aide', text: objFeuilles && !fs.atteinte ? `10 minutes sur un cours, sans rien regarder. Encore ${nb(objFeuilles - fs.faites, 'feuille')} cette semaine.` : '10 minutes sur un cours, sans rien regarder ; la séance commence par ce que tu as oublié.' })));
     vider(page, blocs);
 
     // Zone du pouce : une seule action principale.

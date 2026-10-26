@@ -8,7 +8,7 @@ import {
 } from './fusion.js';
 
 export const REGLAGES_DEFAUT = gelerProfond({
-  nouvellesParJour: 15, objectifJour: OBJECTIF_DEFAUT, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
+  nouvellesParJour: 15, objectifJour: OBJECTIF_DEFAUT, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, feuillesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
   qcmParSeance: 8, pauseToutes: 30, modeles: { correction: '', contestation: '' },
   voix: { vitesse: 1, silence: 2.5 }, maj: 0,
 });
@@ -38,7 +38,7 @@ function relatif(path, racine) {
 // Identifiant utilisable dans un nom de fichier (pas de « / » ni de « .. »).
 const idSur = id => typeof id === 'string' && /^[\w.-]+$/.test(id) && !/^\.+$/.test(id);
 
-const UTILE = /^(plan\.json|(paquets|fiches|qcm)\/[^/]+\.json|progres\/.+\.jsonl?)$/;
+const UTILE = /^(plan\.json|(paquets|fiches|qcm|idees)\/[^/]+\.json|progres\/.+\.jsonl?)$/;
 
 export function cheminUtile(path, racine = 'rappel/') {
   const r = relatif(path, racine);
@@ -68,6 +68,7 @@ function avecDefauts(fichier) {
     nouvellesObjectif: nombreOu(f.nouvellesObjectif, D.nouvellesObjectif),
     objectifSemaine: nombreOu(f.objectifSemaine, D.objectifSemaine),
     nouvellesSemaine: nombreOu(f.nouvellesSemaine, D.nouvellesSemaine),
+    feuillesSemaine: nombreOu(f.feuillesSemaine, D.feuillesSemaine),
     qcmParSeance: nombreOu(f.qcmParSeance, D.qcmParSeance),
     pauseToutes: nombreOu(f.pauseToutes, D.pauseToutes),
     ordrePaquets: tableau(f.ordrePaquets).filter(x => typeof x === 'string'),
@@ -94,7 +95,7 @@ function ordrePaquets(paquets, plan, reglages) {
 // Données de l'appli à partir des fichiers analysés {path: objet}.
 export function vue(objets, racine = 'rappel/') {
   const d = {
-    plan: null, paquets: {}, ordre: [], fiches: {}, qcm: {}, srs: {}, reponses: [], qcmJournal: [],
+    plan: null, paquets: {}, ordre: [], fiches: {}, qcm: {}, srs: {}, reponses: [], qcmJournal: [], idees: {}, feuilles: [],
     carnet: { abreviations: {}, cartes: {} }, aRevoir: { cas: [] }, reglages: null,
     exceptions: { jours: {} }, historique: { days: {} }, cartes: {}, calibration: null,
   };
@@ -106,6 +107,7 @@ export function vue(objets, racine = 'rappel/') {
     if (r === 'plan.json') d.plan = o;
     else if ((m = r.match(/^paquets\/([^/]+)\.json$/))) { if (estObjet(o)) d.paquets[m[1]] = o; }
     else if ((m = r.match(/^fiches\/([^/]+)\.json$/))) { if (estObjet(o)) d.fiches[m[1]] = o; }
+    else if ((m = r.match(/^idees\/([^/]+)\.json$/))) { if (estObjet(o)) d.idees[m[1]] = o; }
     else if ((m = r.match(/^qcm\/([^/]+)\.json$/))) {
       for (const q of tableau(objet(o).qcm)) {
         if (estObjet(q) && q.id != null) d.qcm[q.id] = { ...q, cours: q.cours ?? o.cours ?? m[1], ue: q.ue ?? o.ue };
@@ -114,6 +116,7 @@ export function vue(objets, racine = 'rappel/') {
     else if ((m = r.match(/^progres\/srs\/([^/]+)\.json$/))) d.srs[m[1]] = { ...objet(objet(o).cards) };
     else if (/^progres\/reponses\/[^/]+\.jsonl$/.test(r)) d.reponses.push(...tableau(o));
     else if (/^progres\/qcm\/[^/]+\.jsonl$/.test(r)) d.qcmJournal.push(...tableau(o));
+    else if (/^progres\/feuilles\/[^/]+\.jsonl$/.test(r)) d.feuilles.push(...tableau(o));
     else if (r === 'progres/carnet.json') d.carnet = { abreviations: {}, cartes: {}, ...objet(o) };
     else if (r === 'progres/a-revoir.json') d.aRevoir = { ...objet(o), cas: tableau(objet(o).cas) };
     else if (r === 'progres/reglages.json') reglages = o;
@@ -124,6 +127,7 @@ export function vue(objets, racine = 'rappel/') {
   const parTs = (x, y) => (x.ts || 0) - (y.ts || 0) || compare(String(x.id ?? ''), String(y.id ?? ''));
   d.reponses.sort(parTs);
   d.qcmJournal.sort(parTs);
+  d.feuilles.sort(parTs);
   d.reglages = avecDefauts(reglages);
   d.ordre = ordrePaquets(d.paquets, d.plan, d.reglages);
   for (const pid of d.ordre) {
@@ -141,6 +145,7 @@ function cible(op) {
     case 'reponse': return Number.isFinite(op.ligne?.ts) ? `progres/reponses/${moisParis(op.ligne.ts)}.jsonl` : null;
     case 'qcm-reponse': return Number.isFinite(op.ligne?.ts) ? `progres/qcm/${moisParis(op.ligne.ts)}.jsonl` : null;
     case 'erreur': return Number.isFinite(op.ligne?.ts) ? `progres/erreurs/${moisParis(op.ligne.ts)}.jsonl` : null;
+    case 'feuille': return Number.isFinite(op.ligne?.ts) ? `progres/feuilles/${moisParis(op.ligne.ts)}.jsonl` : null;
     case 'carnet': return 'progres/carnet.json';
     case 'a-revoir': return 'progres/a-revoir.json';
     case 'reglages': return 'progres/reglages.json';
@@ -213,6 +218,7 @@ export function appliquerOp(objets, op, racine = 'rappel/') {
     case 'reponse':
     case 'qcm-reponse':
     case 'erreur':
+    case 'feuille':
       objets[path] = fusionLignes(actuel ?? [], [op.ligne]);
       break;
     case 'carnet':

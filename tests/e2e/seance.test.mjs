@@ -429,6 +429,43 @@ test('nouvelles imposées et semaine : compteurs, objectif détaillé, nouvelles
 });
 
 
+test('feuille blanche : choix du cours, écriture, correction par Gemini, séance qui commence par les oubliées', async () => {
+  const o = await ouvrir(navigateur, serveur.base);
+  const { page, faux } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    await clic(page, 'Feuille blanche');
+    await page.getByRole('heading', { name: 'Feuille blanche' }).waitFor();
+    await page.locator('.cours-choix', { hasText: 'Les formes' }).click();
+    await page.locator('.chrono').waitFor();
+    assert.match(await texte(page.locator('.chrono')), /^(10:00|9:5\d)$/);
+    await page.fill('#feuille-texte', 'Un hexagone a six côtés. Un carré a quatre angles droits.');
+    await verifierEcran(page, 'feuille-ecriture');
+    // Moins de 5 minutes : il faut confirmer.
+    await clic(page, "J'ai fini");
+    await page.locator('.barre-action .btn', { hasText: 'Touche encore' }).click();
+    await page.locator('.grand-compteur__chiffre', { hasText: '1/4' }).waitFor();
+    await page.getByText('Bon début.').waitFor();
+    await page.getByText('À revoir en premier (2)').waitFor();
+    await page.getByText('moins de 5 min : ne compte pas pour la semaine', { exact: false }).waitFor();
+    await verifierEcran(page, 'feuille-bilan');
+    await clic(page, 'Réviser ces cartes (3)');
+    await page.locator('#reponse').waitFor();
+    const premiere = await question(page);
+    assert.notEqual(premiere.id, 'for-01', 'la carte bien écrite ne vient pas en premier');
+    await terminerSeance(page);
+    await attendre(() => Object.keys(fichiersDepot(faux)).some(k => k.includes('progres/feuilles/')), { message: 'journal des feuilles' });
+    const [ligne] = Object.entries(fichiersDepot(faux)).find(([k]) => k.includes('progres/feuilles/'))[1];
+    assert.deepEqual([ligne.cours, ligne.presentes, ligne.partielles, ligne.absentes, ligne.source], ['ess-formes', 1, 1, 2, 'cartes']);
+    assert.ok(ligne.duree < 5 * 60000);
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
+
 test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui dit quoi faire', async () => {
   const o = await ouvrir(navigateur, serveur.base, { fichiers: { ...lireDonnees(), 'rappel/progres/srs/ess-couleurs.json': '{ abîmé' } });
   const { page, faux } = o;

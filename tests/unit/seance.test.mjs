@@ -217,6 +217,13 @@ test('Seance avec nouvelles imposées : 30 % de nouvelles mêlées dès le débu
   assert.equal(s2.file.slice(0, 100).filter(estNeuve).length, 0);
 });
 
+test('Seance : cartes prioritaires en tête (feuille blanche), sans doublon ni carte inconnue', () => {
+  const p = paquet('p1', Array.from({ length: 6 }, (_, i) => carte(`c${i}`)));
+  const d = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 10 } });
+  const s = new Seance({ donnees: d, maintenant: T, rnd: graine(1), priorite: [{ paquet: 'p1', carteId: 'c4' }, { paquet: 'p1', carteId: 'c2' }, { paquet: 'p1', carteId: 'c4' }, { paquet: 'p1', carteId: 'zz' }] });
+  assert.deepEqual(s.file.map(el => el.carteId), ['c4', 'c2', 'c0', 'c1', 'c3', 'c5']);
+});
+
 test('semaine : du mercredi au mardi, somme des cartes du jour', () => {
   assert.equal(debutSemaine(z('2026-10-26T10:00:00Z')), '2026-10-21');   // lundi
   assert.equal(debutSemaine(z('2026-10-27T23:30:00Z')), '2026-10-28');   // mercredi 0 h 30 à Paris (heure d'hiver)

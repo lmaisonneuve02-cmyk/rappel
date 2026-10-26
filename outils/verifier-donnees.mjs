@@ -284,6 +284,35 @@ function verifierPlan(plan, ctx) {
 
 // --- Vérification d'un dossier -------------------------------------------------------------
 
+// Liste d'idées d'un cours : {titre, idees: [{id, texte, cartes: [ids du paquet], importance?}], sources?}.
+function verifierIdees(f, chemin, id, ctx) {
+  const err = m => ctx.note.erreur(chemin, null, m);
+  if (!estObjet(f)) { err('la liste d\'idées doit être un objet'); return; }
+  const paquet = ctx.paquets.get(id);
+  if (!paquet) { err(`aucun paquet « ${id} » (paquets/${id}.json) pour cette liste`); return; }
+  const cartes = new Set(paquet.ok ? paquet.p.cartes.filter(estObjet).map(c => c.id) : []);
+  if (!Array.isArray(f.idees) || !f.idees.length) { err('« idees » doit être une liste non vide'); return; }
+  const vus = new Set(), couvertes = new Set();
+  f.idees.forEach((i, n) => {
+    const nom = estObjet(i) && nonVide(i.id) ? `idée ${i.id}` : `idée n° ${n + 1}`;
+    if (!estObjet(i)) { err(`${nom} : doit être un objet`); return; }
+    if (!nonVide(i.id)) err(`${nom} : identifiant « id » manquant`);
+    else if (vus.has(i.id)) err(`${nom} : identifiant en double`);
+    else vus.add(i.id);
+    if (!nonVide(i.texte)) err(`${nom} : « texte » manquant`);
+    if (i.importance != null && !['essentiel', 'utile'].includes(i.importance)) err(`${nom} : « importance » vaut essentiel ou utile`);
+    if (!Array.isArray(i.cartes)) { err(`${nom} : « cartes » doit être une liste (vide si aucune carte ne la couvre)`); return; }
+    for (const c of i.cartes) {
+      if (!cartes.has(c)) err(`${nom} : carte « ${c} » absente du paquet ${id}`);
+      else couvertes.add(c);
+    }
+  });
+  const sansIdee = [...cartes].filter(c => !couvertes.has(c));
+  if (sansIdee.length) ctx.note.avertir(chemin, null, `${pluriel(sansIdee.length, 'carte')} rattachée${sansIdee.length > 1 ? 's' : ''} à aucune idée : ${sansIdee.slice(0, 10).join(', ')}`);
+  const sansCarte = f.idees.filter(i => estObjet(i) && Array.isArray(i.cartes) && !i.cartes.length).length;
+  if (sansCarte) ctx.note.avertir(chemin, null, `${pluriel(sansCarte, 'idée')} sans carte (trous à combler)`);
+}
+
 export async function verifierDossier(dossier, { exigerBaremes = false } = {}) {
   const note = creerNotes();
   const stats = {
@@ -349,6 +378,16 @@ export async function verifierDossier(dossier, { exigerBaremes = false } = {}) {
     if (f === undefined) continue;
     stats.fichiersQcm++;
     stats.qcm += verifierFichierQcm(f, chemin, nomFichier.slice(0, -5), ctx);
+  }
+
+  // Listes d'idées des feuilles blanches (facultatives) : idees/<paquet>.json.
+  stats.idees = 0;
+  for (const nomFichier of await listerJson(dossier, 'idees')) {
+    const chemin = `idees/${nomFichier}`;
+    const f = await lireJson(dossier, chemin, note);
+    if (f === undefined) continue;
+    stats.idees++;
+    verifierIdees(f, chemin, nomFichier.slice(0, -5), ctx);
   }
 
   for (const l of stats.parPaquet) l.erreurs = note.erreurs.filter(e => e.fichier === l.fichier).length;

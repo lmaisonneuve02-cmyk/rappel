@@ -234,7 +234,8 @@ function sansVide(objet) {
 export class Seance {
   // maintenant : ms, ou une fonction qui renvoie l'heure (horloge injectée).
   // mode 'qcm' : QCM des cartes, au plus `max` cartes (qcmRestants).
-  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, mode = 'ecrit', max = Infinity, rnd = Math.random }) {
+  // priorite : [{paquet, carteId}] placées en tête (feuille blanche : idées oubliées d'abord).
+  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, mode = 'ecrit', max = Infinity, priorite = [], rnd = Math.random }) {
     this.donnees = donnees;
     this.mode = mode === 'qcm' ? 'qcm' : 'ecrit';
     this.horloge = typeof maintenant === 'function' ? maintenant : null;
@@ -272,7 +273,15 @@ export class Seance {
       const placerNouvelle = n < nouvelles.length && (r >= revisions.length || n < Math.floor((file.length + 1) * part));
       file.push(placerNouvelle ? nouvelles[n++] : revisions[r++]);
     }
-    this.file = file.slice(0, Math.max(0, max));
+    const cle2 = el => el.paquet + '/' + el.carteId;
+    const enTete = [];
+    const vus = new Set();
+    for (const el of priorite || []) {
+      if (!el || vus.has(cle2(el)) || !this.carteDe(el)) continue;
+      vus.add(cle2(el));
+      enTete.push({ paquet: el.paquet, carteId: el.carteId });
+    }
+    this.file = [...enTete, ...file.filter(el => !vus.has(cle2(el)))].slice(0, Math.max(0, max));
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.

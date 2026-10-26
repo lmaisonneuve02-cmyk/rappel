@@ -151,6 +151,28 @@ test('commentaire et moyen mnémotechnique : facultatifs, texte brut, longueur',
   assert.match(a('p1-15'), /« mnemo » répète la réponse attendue/);
 });
 
+test('listes d\'idées des feuilles blanches : identifiants, cartes du paquet, trous signalés', async () => {
+  const dossier = await ecrireDossier('idees', { ...PROPRE,
+    'idees/p1.json': { titre: 'Valvulopathies', idees: [
+      { id: 'i1', texte: 'Le VG s\'hypertrophie', cartes: ['p1-01'] },
+      { id: 'i1', texte: 'Doublon', cartes: [] },
+      { id: 'i3', texte: '', cartes: ['p9-99'], importance: 'capital' },
+    ] },
+    'idees/inconnu.json': { idees: [{ id: 'i1', texte: 'x', cartes: [] }] },
+  });
+  const { erreurs, avertissements, stats } = await verifierDossier(dossier);
+  const e = messages(erreurs, 'idees/p1.json').join('\n');
+  assert.match(e, /idée i1 : identifiant en double/);
+  assert.match(e, /idée i3 : « texte » manquant/);
+  assert.match(e, /idée i3 : « importance » vaut essentiel ou utile/);
+  assert.match(e, /idée i3 : carte « p9-99 » absente du paquet p1/);
+  assert.match(messages(erreurs, 'idees/inconnu.json').join('\n'), /aucun paquet « inconnu »/);
+  const a = messages(avertissements, 'idees/p1.json').join('\n');
+  assert.match(a, /1 carte rattachée à aucune idée : p1-02/);
+  assert.match(a, /1 idée sans carte \(trous à combler\)/);
+  assert.equal(stats.idees, 2);
+});
+
 test('dossier abîmé : QCM et plan', async () => {
   const dossier = join(racine, 'abime');
   const { erreurs, avertissements, stats } = await verifierDossier(dossier);

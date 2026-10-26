@@ -82,6 +82,7 @@ export function creer(ctx, params = {}) {
   const seance = new Seance({
     donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance,
     mode: modeQcm ? 'qcm' : 'ecrit', max: modeQcm ? qcmRestants(donnees, ctx.maintenant()) : Infinity,
+    priorite: Array.isArray(params.priorite) ? params.priorite : [],
   });
   const objectifAuDepart = ctx.atteint();
   let objectifAnnonce = objectifAuDepart;

@@ -34,7 +34,7 @@ function objetsTest() {
 
 test('REGLAGES_DEFAUT : valeurs de la conception, gelées', () => {
   assert.deepEqual(REGLAGES_DEFAUT, {
-    nouvellesParJour: 15, objectifJour: 60, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
+    nouvellesParJour: 15, objectifJour: 60, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, feuillesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
     qcmParSeance: 8, pauseToutes: 30, modeles: { correction: '', contestation: '' },
     voix: { vitesse: 1, silence: 2.5 }, maj: 0,
   });
@@ -100,6 +100,16 @@ test('vue : dossier vide → données vides avec défauts', () => {
   assert.deepEqual(d.reglages, { ...REGLAGES_DEFAUT, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0], modeles: { correction: '', contestation: '' }, voix: { vitesse: 1, silence: 2.5 } });
   assert.deepEqual(d.historique, { days: {} });
   assert.deepEqual(d.exceptions, { jours: {} });
+  assert.deepEqual([d.idees, d.feuilles], [{}, []]);
+});
+
+test('vue : listes d\'idées et journal des feuilles blanches (trié)', () => {
+  const d = vue({
+    [R + 'idees/p1.json']: { titre: 'Cours 1', idees: [{ id: 'i1', texte: 'Une idée', cartes: [] }] },
+    [R + 'progres/feuilles/2026-10.jsonl']: [{ id: 'b', ts: 2 }, { id: 'a', ts: 1 }],
+  }, R);
+  assert.equal(d.idees.p1.titre, 'Cours 1');
+  assert.deepEqual(d.feuilles.map(l => l.id), ['a', 'b']);
 });
 
 test('cheminsTouches : un fichier par opération', () => {
@@ -110,6 +120,7 @@ test('cheminsTouches : un fichier par opération', () => {
   assert.deepEqual(cheminsTouches({ type: 'reponse', ligne: { ts: Date.UTC(2026, 9, 31, 23, 30) } }, R), ['rappel/progres/reponses/2026-11.jsonl']);
   assert.deepEqual(cheminsTouches({ type: 'qcm-reponse', ligne }, R), ['rappel/progres/qcm/2026-10.jsonl']);
   assert.deepEqual(cheminsTouches({ type: 'erreur', ligne }, R), ['rappel/progres/erreurs/2026-10.jsonl']);
+  assert.deepEqual(cheminsTouches({ type: 'feuille', ligne }, R), ['rappel/progres/feuilles/2026-10.jsonl']);
   assert.deepEqual(cheminsTouches({ type: 'carnet', carte: 'x' }, R), ['rappel/progres/carnet.json']);
   assert.deepEqual(cheminsTouches({ type: 'a-revoir', cas: {} }, R), ['rappel/progres/a-revoir.json']);
   assert.deepEqual(cheminsTouches({ type: 'reglages', reglages: {} }, R), ['rappel/progres/reglages.json']);

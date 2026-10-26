@@ -96,6 +96,7 @@ export function genreRequete(corps) {
   if (props.qcm) return 'generation-qcm';
   if (props.verdict) return 'correction';
   if (props.explication) return 'explication';
+  if (props.hors_liste) return 'feuille';
   return 'verification';
 }
 
@@ -108,6 +109,13 @@ export function geminiSimule({ verdicts = {} } = {}) {
     if (genre === 'contestation') {
       return enveloppe({ analyse: 'Même sens que la réponse attendue.', etudiant_a_raison: true, verdict: 'juste',
         explication: 'Ta formulation dit la même chose.', formulation: '' });
+    }
+    if (genre === 'feuille') {
+      // Première idée présente, deuxième partielle, les autres oubliées.
+      const texte = corps.contents?.[0]?.parts?.[0]?.text || '';
+      const ids = [...texte.matchAll(/^([\w-]+) : /gm)].map(m => m[1]);
+      return enveloppe({ idees: ids.map((id, i) => ({ id, statut: i === 0 ? 'presente' : i === 1 ? 'partielle' : 'absente', preuve: '' })),
+        hors_liste: ['Un carré a quatre angles droits.'], ajouts: ['Le pentagone'], erreurs: [], bilan: 'Bon début.' });
     }
     if (genre === 'explication') {
       return enveloppe({ explication: 'Un hexagone se découpe en six triangles équilatéraux autour de son centre.', mnemo: '' });

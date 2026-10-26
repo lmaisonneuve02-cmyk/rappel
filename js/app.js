@@ -2,7 +2,7 @@
 import { CLES, DEPOT_DEFAUT, VERSION, OBJECTIF_DEFAUT } from './config.js';
 import { Synchro } from './sync.js';
 import { ouvrirStockage } from './stockage.js';
-import { objectifDuJour } from './seance.js';
+import { objectifDuJour, semaineEnCours } from './seance.js';
 import { creerIdf } from './texte.js';
 import { jourParis } from './temps.js';
 import { h, $, vider, icone, toast, lireLocal, ecrireLocal, lireJson, estTactile, ouvrirFeuille, bouton, nb } from './ui/commun.js';
@@ -122,8 +122,16 @@ async function demarrer() {
       return idfMemo;
     },
     objectif: () => Number(sync.donnees().reglages?.objectifJour) || OBJECTIF_DEFAUT,
-    // Objectif du jour (règle du 16/10) : `objectifJour` cartes, révisions d'abord (objectifDuJour, seance.js).
-    jour: () => objectifDuJour(sync.donnees(), Date.now(), ctx.objectif()),
+    // Nouvelles imposées dans l'objectif du jour (règle du 26/10 : 60 dont 18) ; 0 = révisions d'abord.
+    nouvellesObjectif: () => Number(sync.donnees().reglages?.nouvellesObjectif) || 0,
+    // Objectif du jour (règles du 16/10 et du 26/10) : `objectifJour` cartes dont `nouvellesObjectif` nouvelles
+    // (objectifDuJour, seance.js).
+    jour: () => objectifDuJour(sync.donnees(), Date.now(), ctx.objectif(), ctx.nouvellesObjectif()),
+    // Semaine du mercredi au mardi (règle du 26/10 : 840 cartes dont 252 nouvelles) ; null sans objectif de semaine.
+    semaine: () => {
+      const r = sync.donnees().reglages || {};
+      return Number(r.objectifSemaine) > 0 ? semaineEnCours(sync.donnees(), Date.now(), Number(r.objectifSemaine), Number(r.nouvellesSemaine) || 0) : null;
+    },
     cartes: () => ctx.jour().cartes,
     atteint: () => ctx.jour().atteint,
     aller,
@@ -151,8 +159,10 @@ async function demarrer() {
     const rev = j ? j.revisionsRestantes : 0;
     const atteint = !!j?.atteint;
     // « Cartes : n/objectif ✓ · Révisions : r » ; sur téléphone, les révisions passent sous les cartes.
+    const sem = j ? ctx.semaine() : null;
     vider(compteurTexte, h('span', { text: `Cartes : ${n}/${objectif}${atteint ? ' ✓' : ''}` }),
-      rev ? [h('span', { class: 'compteur__sep', text: ' · ' }), h('span', { class: 'compteur__rev', text: `Révisions : ${rev}` })] : null);
+      rev ? [h('span', { class: 'compteur__sep', text: ' · ' }), h('span', { class: 'compteur__rev', text: `Révisions : ${rev}` })] : null,
+      sem ? [h('span', { class: 'compteur__sep', text: ' · ' }), h('span', { class: 'compteur__rev', text: `Semaine : ${sem.cartes}/${sem.objectif}${sem.atteinte ? ' ✓' : ''}` })] : null);
     compteurBarre.max = objectif;
     compteurBarre.value = Math.min(n, objectif);
     compteur.classList.toggle('compteur--atteint', atteint);
@@ -190,10 +200,13 @@ async function demarrer() {
     ouvrirFeuille({
       titre: `Aujourd'hui : ${nb(n, 'carte')} sur ${objectif}${rev ? `, ${nb(rev, 'révision')} à faire` : ''}`, surtitre: 'Comment on compte', classe: 'feuille--courte', libelleFermer: 'Compris',
       contenu: h('ul', { class: 'liste-simple' },
-        h('li', { text: `Objectif : ${objectif} cartes par jour (révisions d'abord, puis des nouvelles pour compléter).` }),
+        h('li', { text: ctx.nouvellesObjectif()
+          ? `Chaque jour : au moins ${objectif} cartes, dont ${ctx.nouvellesObjectif()} nouvelles (mêlées aux révisions dès le début).`
+          : `Objectif : ${objectif} cartes par jour (révisions d'abord, puis des nouvelles pour compléter).` }),
+        ctx.semaine() ? h('li', { text: `Chaque semaine, du mercredi au mardi : ${ctx.semaine().objectif} cartes, dont ${ctx.semaine().nouvellesObjectif} nouvelles. Les jours à ${objectif} se rattrapent dans la semaine.` }) : null,
         h('li', { text: 'Une carte compte une fois, même si elle revient après une erreur.' }),
         h('li', { text: 'Les révisions en avance comptent.' }),
-        h('li', { text: 'Les QCM ne comptent pas.' }),
+        h('li', { text: 'QCM rapide : 20 cartes par jour au plus. Les QCM de la fac ne comptent pas.' }),
         h('li', { text: 'Le compte repart à zéro à minuit.' }),
         h('li', { text: 'Au-delà, rien n\'est exigé : tu peux continuer.' })),
     });

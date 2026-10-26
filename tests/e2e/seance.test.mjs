@@ -4,6 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { estAcquise } from '../../js/fsrs.js';
 import { jourParis } from '../../js/temps.js';
+import { JOURS_TOTAL_SEUL } from '../../js/seance.js';
 import { refText } from '../../js/texte.js';
 import { indice } from '../../js/correcteur.js';
 import {
@@ -379,6 +380,36 @@ test('QCM rapide : 4 réponses mélangées, bonne réponse = partiel, lignes « 
     // Retour : 2 QCM de faits sur 20.
     await clic(page, 'Retour');
     await page.getByText('(encore 18)', { exact: false }).waitFor();
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
+
+test('nouvelles imposées et semaine : compteurs, objectif détaillé, nouvelles mêlées dès le début', async () => {
+  const fichiers = lireDonnees();
+  const reglages = JSON.parse(fichiers['rappel/progres/reglages.json']);
+  Object.assign(reglages, { objectifJour: 4, nouvellesObjectif: 2, objectifSemaine: 28, nouvellesSemaine: 14 });
+  fichiers['rappel/progres/reglages.json'] = JSON.stringify(reglages);
+  const o = await ouvrir(navigateur, serveur.base, { fichiers });
+  const { page } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    assert.equal(await compteur(page), 'Cartes : 0/4 · Révisions : 2 · Semaine : 0/28');
+    assert.equal(await texte(page.locator('.objectif-ligne').first()), `Objectif : encore 4 cartes${JOURS_TOTAL_SEUL.has(jourParis(Date.now())) ? '' : ' (dont 2 révisions et 2 nouvelles)'}. Cette séance peut suffire.`);
+    assert.match(await texte(page.locator('.objectif-ligne--semaine')), /^Semaine \(mer\. \d+ → mar\. \d+\) : 0\/28 cartes, dont 0\/14 nouvelles · /);
+    await page.getByText('environ 3 min · nouvelles mêlées aux révisions').waitFor();
+    await verifierEcran(page, 'semaine-aujourdhui');
+    await page.locator('.barre-action .btn--principal').click();
+    // Révision, puis tout de suite une nouvelle (avec sa micro-fiche) : la moitié de l'objectif.
+    await page.locator('.puce', { hasText: 'Révision' }).waitFor();
+    await bonneReponse(page);
+    await clic(page, "J'ai lu, on y va");
+    await page.locator('.puce', { hasText: 'Nouvelle' }).waitFor();
+    await bonneReponse(page);
+    assert.equal(await compteur(page), 'Cartes : 2/4 · Révisions : 1 · Semaine : 2/28');
     o.verifierConsole();
   } finally {
     await o.fermer();

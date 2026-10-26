@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
-  JOURS_TOTAL_SEUL, Seance, QCM_MAX, qcmRestants,
+  JOURS_TOTAL_SEUL, Seance, QCM_MAX, qcmRestants, semaineEnCours, debutSemaine,
 } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
@@ -171,6 +171,72 @@ test('Seance en mode QCM : au plus `max` cartes, lignes marquées mode « qcm »
   const e = new Seance({ donnees: d, maintenant: T, rnd: graine(1) });
   assert.equal(e.restantes(), 8);
   assert.equal('mode' in e.noter({ verdict: 'juste', correcteur: 'local', maintenant: T + 1000 }).ligne, false);
+});
+
+test('objectifDuJour avec nouvelles imposées (60 dont 18) : révisions jusqu\'à 42, nouvelles jusqu\'à 18', () => {
+  const nouvellesCartes = Array.from({ length: 40 }, (_, i) => carte(`n${i}`));
+  const anciennes = Array.from({ length: 80 }, (_, i) => carte(`r${i}`));
+  const srs = { p1: Object.fromEntries(anciennes.map(c => [c.id, { s: 2, d: 5, due: T - JOUR, last: T - 3 * JOUR, reps: 2, lapses: 0 }])) };
+  const reglages = { nouvellesParJour: 60 };
+  const rev = (n, i0 = 0) => Array.from({ length: n }, (_, i) => ligne(`r${i0 + i}`, T + (i0 + i) * 1000, { nouvelle: false }));
+  const neuves = n => Array.from({ length: n }, (_, i) => ligne(`n${i}`, T + (200 + i) * 1000));
+  const jour = reponses => {
+    const d = donneesDe({ paquets: [paquet('p1', [...anciennes, ...nouvellesCartes])], srs: structuredClone(srs), reglages, reponses });
+    // les cartes répondues aujourd'hui ont un état du jour
+    for (const l of reponses) d.srs.p1[l.carte] = { s: 2, d: 5, due: T + 3 * JOUR, last: l.ts, reps: 1, lapses: 0 };
+    return objectifDuJour(d, T, 60, 18);
+  };
+  const o1 = jour([...rev(60)]);
+  assert.deepEqual([o1.atteint, o1.encore, o1.encoreRevisions, o1.encoreNouvelles], [false, 18, 0, 18], '60 révisions : il manque les 18 nouvelles');
+  const o2 = jour([...rev(42), ...neuves(18)]);
+  assert.equal(o2.atteint, true);
+  assert.deepEqual([o2.nouvellesObjectif, o2.nouvellesFaites], [18, 18]);
+  const o3 = jour([...rev(30), ...neuves(30)]);
+  assert.deepEqual([o3.atteint, o3.encore, o3.encoreRevisions], [false, 12, 12], 'trop peu de révisions');
+  const o4 = jour([...rev(10), ...neuves(10)]);
+  assert.deepEqual([o4.encore, o4.encoreRevisions, o4.encoreNouvelles], [40, 32, 8]);
+  // Sans nouvelles imposées : la règle du 16/10 (révisions d'abord).
+  const d = donneesDe({ paquets: [paquet('p1', anciennes)], srs, reglages });
+  assert.deepEqual([objectifDuJour(d, T, 60).encoreRevisions, objectifDuJour(d, T, 60).encoreNouvelles], [60, 0]);
+});
+
+test('Seance avec nouvelles imposées : 30 % de nouvelles mêlées dès le début', () => {
+  const anciennes = Array.from({ length: 100 }, (_, i) => carte(`r${i}`));
+  const neuves = Array.from({ length: 50 }, (_, i) => carte(`n${i}`));
+  const srs = { p1: Object.fromEntries(anciennes.map(c => [c.id, { s: 2, d: 5, due: T - JOUR, last: T - 3 * JOUR, reps: 2, lapses: 0 }])) };
+  const d = donneesDe({ paquets: [paquet('p1', [...anciennes, ...neuves])], srs, reglages: { nouvellesParJour: 36, objectifJour: 60, nouvellesObjectif: 18 } });
+  const s = new Seance({ donnees: d, maintenant: T, rnd: graine(1) });
+  const estNeuve = el => el.carteId.startsWith('n');
+  const dans = k => s.file.slice(0, k).filter(estNeuve).length;
+  assert.deepEqual([dans(10), dans(60), dans(120)], [3, 18, 36]);
+  assert.equal(s.file.length, 136);
+  assert.deepEqual(s.file.slice(0, 4).map(estNeuve), [false, false, false, true]);
+  // Sans nouvelles imposées : révisions d'abord.
+  const d2 = donneesDe({ paquets: [paquet('p1', [...anciennes, ...neuves])], srs, reglages: { nouvellesParJour: 36 } });
+  const s2 = new Seance({ donnees: d2, maintenant: T, rnd: graine(1) });
+  assert.equal(s2.file.slice(0, 100).filter(estNeuve).length, 0);
+});
+
+test('semaine : du mercredi au mardi, somme des cartes du jour', () => {
+  assert.equal(debutSemaine(z('2026-10-26T10:00:00Z')), '2026-10-21');   // lundi
+  assert.equal(debutSemaine(z('2026-10-27T23:30:00Z')), '2026-10-28');   // mercredi 0 h 30 à Paris (heure d'hiver)
+  assert.equal(debutSemaine(z('2026-11-03T22:30:00Z')), '2026-10-28');   // mardi 23 h 30 à Paris (heure d'hiver)
+  const L = (id, iso, extra = {}) => ligne(id, z(iso), extra);
+  const reponses = [
+    L('a', '2026-10-27T12:00:00Z'),                            // mardi : semaine d'avant
+    L('a', '2026-10-28T08:00:00Z', { nouvelle: false }),       // mercredi
+    L('b', '2026-10-28T08:01:00Z'), L('b', '2026-10-28T08:20:00Z', { nouvelle: false }),   // une fois
+    L('a', '2026-10-29T08:00:00Z', { nouvelle: false }),       // jeudi : même carte, autre jour, compte
+    L('c', '2026-11-03T23:30:00Z'),                            // mercredi suivant, 0 h 30 à Paris
+  ];
+  const d = donneesDe({ reponses });
+  const s = semaineEnCours(d, z('2026-11-02T12:00:00Z'), 840, 252);
+  assert.deepEqual(s, {
+    debut: '2026-10-28', fin: '2026-11-03', joursRestants: 1, cartes: 3, nouvelles: 1, objectif: 840, nouvellesObjectif: 252,
+    encore: 837, encoreNouvelles: 251, atteinte: false,
+  });
+  assert.equal(semaineEnCours(d, z('2026-11-03T22:59:00Z'), 3, 1).atteinte, true);
+  assert.equal(semaineEnCours(d, z('2026-11-03T23:00:00Z'), 3, 1).cartes, 1, 'nouvelle semaine');
 });
 
 test('aReviser : cartes disponibles (dû dès minuit, +10 min après une erreur), filtre', () => {

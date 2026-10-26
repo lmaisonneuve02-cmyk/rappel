@@ -178,7 +178,14 @@ export function points(x) { const v = Math.round((Number(x) || 0) * 100) / 100; 
 
 // Objectif du jour (objectifDuJour) : ce qui manque, « encore 12 cartes (dont 5 révisions) ».
 export function texteEncore(jour) {
-  return `encore ${nb(jour.encore, 'carte')}${jour.encoreRevisions ? ` (dont ${nb(jour.encoreRevisions, 'révision')})` : ''}`;
+  const dont = [jour.encoreRevisions && nb(jour.encoreRevisions, 'révision'), jour.encoreNouvelles && nb(jour.encoreNouvelles, 'nouvelle')].filter(Boolean);
+  return `encore ${nb(jour.encore, 'carte')}${dont.length ? ` (dont ${dont.join(' et ')})` : ''}`;
+}
+
+// Semaine (semaineEnCours) : « Semaine (mer. 28 → mar. 3) : 300/840 cartes, dont 90/252 nouvelles. »
+export function texteSemaine(s) {
+  const reste = s.atteinte ? 'atteinte' : s.joursRestants ? `encore ${nb(s.joursRestants, 'jour')} après aujourd'hui` : "dernier jour : jusqu'à minuit";
+  return `Semaine (${dateFr(s.debut, true)} → ${dateFr(s.fin, true)}) : ${s.cartes}/${s.objectif} cartes, dont ${s.nouvelles}/${s.nouvellesObjectif} nouvelles · ${reste}.`;
 }
 // Objectif atteint : même phrase sur Aujourd'hui et en séance (atteint aussi quand il ne reste rien à compter).
 export function texteAtteint(jour) {

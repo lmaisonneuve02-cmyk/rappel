@@ -4,7 +4,7 @@ import { qcmProposables } from '../qcm.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
 import { reconnaissanceDisponible } from '../voix.js';
-import { h, vider, bouton, icone, bandeau, pastilles, nb, dateFr, aideVue, texteEncore, texteAtteint } from './commun.js';
+import { h, vider, bouton, icone, bandeau, pastilles, nb, dateFr, aideVue, texteEncore, texteAtteint, texteSemaine } from './commun.js';
 
 const MIN_PAR_CARTE = 0.6;
 let filtreMemo = { jour: '', filtre: 'tout' };   // le choix d'un paquet vaut jusqu'à minuit
@@ -107,12 +107,14 @@ export function creer(ctx, params = {}) {
       blocs.push(bandeau('Un fichier de progression est abîmé sur GitHub : les envois sont bloqués. Demande à Claude de le réparer.', { type: 'erreur' }));
     }
     if (jour.atteint) blocs.push(bandeau(texteAtteint(jour), { type: 'reussite' }));
+    const semaine = ctx.semaine?.();
+    const ligneSemaine = semaine ? h('p', { class: 'objectif-ligne objectif-ligne--semaine', text: texteSemaine(semaine) }) : null;
 
     const paquetNom = filtre === 'tout' ? null : (d.paquets[filtre]?.nom || filtre);
     const enLigne = ctx.enLigne() && etat.mode !== 'hors-ligne';
     // Ce paquet suffit-il pour l'objectif ? (les cartes ratées qui reviennent sont déjà comptées)
     // Sinon, révisions d'abord : elles sont dans les autres paquets, « Tout » devient l'action principale.
-    const suffit = r.revisions >= jour.encoreRevisions && r.revisions + r.nouvelles >= jour.encore;
+    const suffit = r.revisions >= jour.encoreRevisions && r.nouvelles >= (jour.encoreNouvelles || 0) && r.revisions + r.nouvelles >= jour.encore;
     const versTout = !jour.atteint && !!paquetNom && !suffit && total.total > r.total;
     const avance = !versTout && r.total === 0 && revisionsEnAvance(d, now, filtre).length > 0;
 
@@ -124,9 +126,10 @@ export function creer(ctx, params = {}) {
         h('p', { class: 'surtitre', text: dateFr(jourParis(now)) }),
         h('h1', { class: 'titre-page', text: 'Ta séance du jour' }),
         h('p', { class: 'chiffres', text: chiffres }),
-        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${(r.revisions || r.reprises) && r.nouvelles ? ' · révisions d\'abord' : ''}` }),
+        h('p', { class: 'chiffres chiffres--doux', text: `environ ${minutes} min${(r.revisions || r.reprises) && r.nouvelles ? (ctx.nouvellesObjectif?.() ? ' · nouvelles mêlées aux révisions' : ' · révisions d\'abord') : ''}` }),
         !jour.atteint ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${texteEncore(jour)}. ` }),
-          suffit ? 'Cette séance peut suffire.' : versTout ? 'Ce paquet ne suffit pas : choisis « Tout ».' : 'Fais toute la séance.') : null));
+          suffit ? 'Cette séance peut suffire.' : versTout ? 'Ce paquet ne suffit pas : choisis « Tout ».' : 'Fais toute la séance.') : null,
+        ligneSemaine));
     } else {
       const prochaines = demain(d, now);
       blocs.push(h('section', { class: 'bloc-seance' },
@@ -135,7 +138,8 @@ export function creer(ctx, params = {}) {
         paquetNom && total.total ? h('p', { class: 'chapeau', text: `Il reste ${nb(total.total, 'carte')} dans les autres paquets.` }) : null,
         !jour.atteint && (versTout || avance) ? h('p', { class: 'objectif-ligne' }, h('strong', { text: `Objectif : ${texteEncore(jour)}. ` }),
           versTout ? 'Choisis « Tout » pour continuer.' : 'Révise en avance pour compléter.') : null,
-        prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null));
+        prochaines ? h('p', { class: 'aide', text: `Prochaines révisions : demain, ${nb(prochaines, 'carte')}.` }) : null,
+        ligneSemaine));
     }
 
     // Limite de nouvelles cartes atteinte (et il en reste à découvrir).

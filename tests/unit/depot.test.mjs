@@ -34,7 +34,7 @@ function objetsTest() {
 
 test('REGLAGES_DEFAUT : valeurs de la conception, gelées', () => {
   assert.deepEqual(REGLAGES_DEFAUT, {
-    nouvellesParJour: 15, objectifJour: 60, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
+    nouvellesParJour: 15, objectifJour: 60, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
     qcmParSeance: 8, pauseToutes: 30, modeles: { correction: '', contestation: '' },
     voix: { vitesse: 1, silence: 2.5 }, maj: 0,
   });

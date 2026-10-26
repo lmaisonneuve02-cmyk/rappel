@@ -1,7 +1,7 @@
 // Séance de révision : ce qu'il y a à faire aujourd'hui, file des cartes, étapes et notes.
 // Module pur : aucun accès au DOM ; horloge et aléa sont injectés.
 import { review, noteDe, estDisponible } from './fsrs.js';
-import { MIN, jourParis, debutJourParis, finJourParis, isoParis } from './temps.js';
+import { MIN, jourParis, debutJourParis, finJourParis, isoParis, decalerJour } from './temps.js';
 
 const NOUVELLES_DEFAUT = 15;
 const PAUSE_DEFAUT = 30;
@@ -112,6 +112,32 @@ export function cartesDuJour(donnees, maintenant) {
   return { cartes, nouvelles: cartes - revisions, revisions, qcm: qcm.length, qcmComptees };
 }
 
+// Semaine de cartes (règle du 26 oct. 2026, décision explicite de l'utilisateur) : du mercredi au mardi,
+// comme le contrôle. Somme des cartes du jour (et des nouvelles du jour) de chaque jour de la semaine en cours.
+// objectif / nouvelles : 840 dont 252 (7 × 120 dont 36). Vérifiée la nuit du mardi au mercredi.
+const MERCREDI = 3;
+export function debutSemaine(maintenant) {
+  let jour = jourParis(maintenant);
+  while (new Date(jour + 'T12:00:00Z').getUTCDay() !== MERCREDI) jour = decalerJour(jour, -1);
+  return jour;
+}
+
+export function semaineEnCours(donnees, maintenant, objectif = 0, nouvelles = 0) {
+  const debut = debutSemaine(maintenant), aujourdhui = jourParis(maintenant);
+  let cartes = 0, faites = 0, jours = 0;
+  for (let jour = debut; jour <= aujourdhui; jour = decalerJour(jour, 1)) {
+    const c = cartesDuJour(donnees, Date.parse(jour + 'T12:00:00Z'));
+    cartes += c.cartes;
+    faites += c.nouvelles;
+    jours++;
+  }
+  const o = Math.max(0, nombre(objectif, 0)), n = Math.max(0, nombre(nouvelles, 0));
+  return {
+    debut, fin: decalerJour(debut, 6), joursRestants: 7 - jours, cartes, nouvelles: faites, objectif: o, nouvellesObjectif: n,
+    encore: Math.max(0, o - cartes), encoreNouvelles: Math.max(0, n - faites), atteinte: cartes >= o && faites >= n,
+  };
+}
+
 // QCM des cartes encore possibles aujourd'hui (0 à QCM_MAX).
 export const qcmRestants = (donnees, maintenant) => Math.max(0, QCM_MAX - cartesDuJour(donnees, maintenant).qcm);
 
@@ -129,20 +155,32 @@ export function revisionsRestantes(donnees, maintenant) {
 // révisions d'abord. Atteint si cartes >= objectif et révisions faites >= min(objectif, révisions du jour),
 // ou s'il ne reste plus rien à proposer (aucune révision restante, aucune nouvelle carte possible).
 // Le 16 oct. (JOURS_TOTAL_SEUL), seul le total compte.
-// encore / encoreRevisions : ce qui manque (0 une fois atteint ; jamais plus que ce qui reste à proposer).
-export function objectifDuJour(donnees, maintenant, objectif) {
-  const { cartes, revisions } = cartesDuJour(donnees, maintenant);
+// Nouvelles imposées (règle du 26 oct. 2026, décision explicite de l'utilisateur) : `nouvelles` cartes
+// jamais vues parmi l'objectif (60 dont 18) ; les révisions visées vont alors jusqu'à objectif − nouvelles.
+// Les nouvelles visées ne dépassent pas ce qui peut être proposé (nouvelles du jour + possibles).
+// encore / encoreRevisions / encoreNouvelles : ce qui manque (0 une fois atteint ; jamais plus que ce qui reste à proposer).
+export function objectifDuJour(donnees, maintenant, objectif, nouvelles = 0) {
+  const c = cartesDuJour(donnees, maintenant);
+  const { cartes, revisions } = c;
   const restantes = revisionsRestantes(donnees, maintenant);
-  const revisionsVisees = JOURS_TOTAL_SEUL.has(jourParis(maintenant)) ? 0 : Math.min(objectif, revisions + restantes);
-  const fait = cartes >= objectif && revisions >= revisionsVisees;
-  // « Rien à proposer » suppose des cartes chargées : sans paquet, rien n'est atteint.
-  const possibles = fait ? 0 : nouvellesPossibles(donnees, maintenant).length;
+  const totalSeul = JOURS_TOTAL_SEUL.has(jourParis(maintenant));
+  const possiblesTout = nouvellesPossibles(donnees, maintenant).length;
+  const imposees = totalSeul ? 0 : Math.max(0, Math.min(nombre(nouvelles, 0), objectif));
+  const nouvellesVisees = Math.min(imposees, c.nouvelles + possiblesTout);
+  const revisionsVisees = totalSeul ? 0 : Math.min(objectif - imposees, revisions + restantes);
+  const fait = cartes >= objectif && revisions >= revisionsVisees && c.nouvelles >= nouvellesVisees;
+  // « Rien à proposer » suppose des cartes chargées : sans paquet, rien n'est atteint.
+  const possibles = fait ? 0 : possiblesTout;
   const rien = !fait && restantes === 0 && possibles === 0 && Object.keys(donnees.paquets || {}).length > 0;
   const atteint = fait || rien;
   const encoreRevisions = atteint ? 0 : Math.max(0, revisionsVisees - revisions);
-  // Tout faire (révisions restantes et nouvelles possibles) mène à « rien à proposer » : c'est le plus exigé.
-  const encore = atteint ? 0 : Math.min(Math.max(objectif - cartes, encoreRevisions), restantes + possibles);
-  return { objectif, cartes, revisionsFaites: revisions, revisionsRestantes: restantes, atteint, encore, encoreRevisions };
+  const encoreNouvelles = atteint ? 0 : Math.max(0, nouvellesVisees - c.nouvelles);
+  // Tout faire (révisions restantes et nouvelles possibles) mène à « rien à proposer » : c'est le plus exigé.
+  const encore = atteint ? 0 : Math.min(Math.max(objectif - cartes, encoreRevisions + encoreNouvelles), restantes + possibles);
+  return {
+    objectif, cartes, revisionsFaites: revisions, revisionsRestantes: restantes, atteint, encore, encoreRevisions,
+    nouvellesObjectif: imposees, nouvellesFaites: c.nouvelles, encoreNouvelles,
+  };
 }
 
 export function aReviser(donnees, maintenant, filtre = 'tout') {
@@ -223,8 +261,18 @@ export class Seance {
     }
     const cle = el => this.carteDe(el)?.fiche || el.paquet;
     revisions = espacer(melanger(revisions, rnd), cle);
-    // Révisions d'abord, puis les nouvelles cartes pour compléter (jusqu'à nouvellesParJour).
-    this.file = [...revisions, ...nouvellesPossibles(donnees, t0, filtre)].slice(0, Math.max(0, max));
+    const nouvelles = nouvellesPossibles(donnees, t0, filtre);
+    // Nouvelles imposées (26 oct.) : mêlées aux révisions dès le début, dans la proportion de l'objectif
+    // (18 sur 60 : 30 %) ; sans nouvelles imposées, révisions d'abord.
+    const objectif = nombre(donnees.reglages?.objectifJour, 0);
+    const part = objectif > 0 ? Math.min(1, Math.max(0, nombre(donnees.reglages?.nouvellesObjectif, 0) / objectif)) : 0;
+    const file = [];
+    let r = 0, n = 0;
+    while (r < revisions.length || n < nouvelles.length) {
+      const placerNouvelle = n < nouvelles.length && (r >= revisions.length || n < Math.floor((file.length + 1) * part));
+      file.push(placerNouvelle ? nouvelles[n++] : revisions[r++]);
+    }
+    this.file = file.slice(0, Math.max(0, max));
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.

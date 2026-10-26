@@ -638,7 +638,7 @@ export function lireReponse(brut) {
 
 // Envoie une requête : délai global (AbortController), un nouvel essai sur 500/503/504,
 // un nouvel essai sans thinkingConfig si un 400 parle de « thinking ».
-async function appeler(requete, { cle, modele, fetch: f, delai, pause = PAUSE_REESSAI, niveau, analyser = true }) {
+async function appeler(requete, { cle, modele, fetch: f, delai, pause = PAUSE_REESSAI, niveau, analyser = true, signal }) {
   cle = String(cle || '').trim();
   if (!cle) throw new ErreurGemini('cle', 'Aucune clé Gemini enregistrée. Ajoute-la dans Réglages, rubrique « Mes clés ».');
   if (/[^\x21-\x7e]/.test(cle)) {
@@ -648,6 +648,8 @@ async function appeler(requete, { cle, modele, fetch: f, delai, pause = PAUSE_RE
   const url = URL_BASE + encodeURIComponent(modele) + ':generateContent';
   const ctl = new AbortController();
   const minuterie = setTimeout(() => ctl.abort(), delai);
+  // Abandon demandé par l'appelant (course entre deux modèles : le perdant s'arrête).
+  if (signal) { if (signal.aborted) ctl.abort(); else signal.addEventListener('abort', () => ctl.abort(), { once: true }); }
   let reflexion = true, reessai = false;
   try {
     for (;;) {
@@ -718,25 +720,57 @@ export function classerModeles(noms, usage) {
     .sort((a, b) => instable(a) - instable(b) || version(b) - version(a) || a.localeCompare(b));
 }
 
+// Course (26 oct., journal d'erreurs : 30 corrections sur 30 hors délai sur flash-lite) : si le modèle n'a
+// pas répondu après `relance` ms, la même demande part aussi vers un autre modèle de la famille ; la première
+// réponse gagne, l'autre est abandonnée, et le gagnant devient le modèle de la session.
+export const RELANCE = 6000;
+
 async function appelerAvecSecours(requete, opts, usage) {
   const premier = remplacants.get(opts.modele) || opts.modele;
-  try {
-    return { brut: await appeler(requete, { ...opts, modele: premier }), modele: premier };
-  } catch (e) {
-    if (!remplacable(e)) throw e;
+  const relance = opts.relance ?? RELANCE;
+  const essayes = new Set([premier, opts.modele]);
+  const ctls = [];
+  const suivant = async () => {
     if (!listeModeles) listeModeles = listerModeles(opts).catch(() => []);
-    const candidats = classerModeles(await listeModeles, usage).filter(m => m !== premier && m !== opts.modele).slice(0, 3);
-    for (const m of candidats) {
-      try {
-        const brut = await appeler(requete, { ...opts, modele: m });
-        remplacants.set(opts.modele, m);
-        return { brut, modele: m };
-      } catch (e2) {
-        if (!remplacable(e2)) throw e2;
+    return classerModeles(await listeModeles, usage).find(m => !essayes.has(m)) || null;
+  };
+  return new Promise((ok, ko) => {
+    let enCours = 0, lances = 0, fini = false, erreur = null, minuterie = null;
+    const finir = () => { fini = true; clearTimeout(minuterie); for (const c of ctls) c.abort(); };
+    const gagner = r => {
+      if (fini) return;
+      finir();
+      if (r.modele !== opts.modele) remplacants.set(opts.modele, r.modele);
+      ok(r);
+    };
+    const essayer = (m, delai) => {
+      essayes.add(m);
+      enCours++;
+      lances++;
+      const ctl = new AbortController();
+      ctls.push(ctl);
+      appeler(requete, { ...opts, modele: m, delai, signal: ctl.signal }).then(brut => gagner({ brut, modele: m }), echec);
+    };
+    const echec = async e => {
+      enCours--;
+      if (fini) return;
+      if (!remplacable(e) && e?.code !== 'delai') { finir(); ko(e); return; }
+      if (!erreur || (erreur.code === 'delai' && e?.code !== 'delai')) erreur = e;
+      if (remplacable(e) && lances < 4) {
+        const m = await suivant();
+        if (fini) return;
+        if (m) { essayer(m, opts.delai); return; }
       }
+      if (enCours === 0) { finir(); ko(erreur); }
+    };
+    essayer(premier, opts.delai);
+    if (relance > 0 && relance < (opts.delai ?? Infinity)) {
+      minuterie = setTimeout(async () => {
+        const m = await suivant();
+        if (m && !fini && lances < 4) essayer(m, (opts.delai ?? 15000) - relance);
+      }, relance);
     }
-    throw e;
-  }
+  });
 }
 
 const estObjet = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -771,9 +805,9 @@ function abreviationsApprises(brutes, reponse, connues) {
 
 // ---------- Fonctions publiques ----------
 
-export async function corrigerGemini(carte, reponse, ctx = {}, { cle, modele, fetch, delai = 15000, pause } = {}) {
+export async function corrigerGemini(carte, reponse, ctx = {}, { cle, modele, fetch, delai = 15000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.correction);
-  const { brut } = await appelerAvecSecours(requeteCorrection(carte, reponse, ctx), { cle, modele: nom, fetch, delai, pause, niveau: 'minimal' }, 'correction');
+  const { brut } = await appelerAvecSecours(requeteCorrection(carte, reponse, ctx), { cle, modele: nom, fetch, delai, pause, relance, niveau: 'minimal' }, 'correction');
   if (!estObjet(brut)) throw new ErreurGemini('format');
   const valide = VERDICTS.includes(brut.verdict);
   const verdict = valide ? brut.verdict : 'partiel';
@@ -794,10 +828,10 @@ export async function corrigerGemini(carte, reponse, ctx = {}, { cle, modele, fe
 }
 
 // Le verdict ne change que si l'étudiant obtient mieux que le premier verdict.
-export async function contesterGemini(carte, reponse, resultatInitial, raison, ctx = {}, { cle, modele, fetch, delai = 30000, pause } = {}) {
+export async function contesterGemini(carte, reponse, resultatInitial, raison, ctx = {}, { cle, modele, fetch, delai = 30000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
   const requete = requeteContestation(carte, reponse, resultatInitial, raison, ctx);
-  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
+  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, relance, niveau: 'low' }, 'contestation');
   if (!estObjet(brut)) throw new ErreurGemini('format');
   const avant = VERDICTS.includes(resultatInitial?.verdict) ? resultatInitial.verdict : 'faux';
   const propose = VERDICTS.includes(brut.verdict) ? brut.verdict : avant;
@@ -814,11 +848,11 @@ export async function contesterGemini(carte, reponse, resultatInitial, raison, c
 
 // QCM brouillons : 5 propositions A à E, au moins une vraie, explications présentes.
 export async function genererQcm({ cours, ue, cartes = [], fiche = null, n = 5 },
-  { cle, modele, fetch, delai = 30000, pause, maintenant = Date.now() } = {}) {
+  { cle, modele, fetch, delai = 30000, pause, relance, maintenant = Date.now() } = {}) {
   const nombre = Math.min(10, Math.max(1, Math.round(n) || 5));
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
   const requete = requeteGenerationQcm({ cours, ue, cartes, fiche, n: nombre });
-  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
+  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, relance, niveau: 'low' }, 'contestation');
   if (!estObjet(brut) || !Array.isArray(brut.qcm)) throw new ErreurGemini('format');
   const ids = new Set(cartes.map(c => c.id));
   const base = `${cours}-g${Number(maintenant).toString(36)}`;
@@ -839,18 +873,18 @@ export async function genererQcm({ cours, ue, cartes = [], fiche = null, n = 5 }
   return sortie;
 }
 
-export async function repondreQcm(qcm, { cle, modele, fetch, delai = 30000, pause } = {}) {
+export async function repondreQcm(qcm, { cle, modele, fetch, delai = 30000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
-  const { brut } = await appelerAvecSecours(requeteReponseQcm(qcm), { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
+  const { brut } = await appelerAvecSecours(requeteReponseQcm(qcm), { cle, modele: nom, fetch, delai, pause, relance, niveau: 'low' }, 'contestation');
   if (!estObjet(brut) || !Array.isArray(brut.lettres)) throw new ErreurGemini('format');
   const lettres = brut.lettres.map(l => String(l).trim().toUpperCase()).filter(l => LETTRES.includes(l));
   return [...new Set(lettres)].sort();
 }
 
 // Feuille blanche : modèle de contestation (texte long, jugement fin), avec secours.
-export async function corrigerFeuille(texteEtudiant, { titre, idees = [] } = {}, { cle, modele, fetch, delai = 60000, pause } = {}) {
+export async function corrigerFeuille(texteEtudiant, { titre, idees = [] } = {}, { cle, modele, fetch, delai = 60000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
-  const { brut } = await appelerAvecSecours(requeteFeuille(texteEtudiant, { titre, idees }), { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
+  const { brut } = await appelerAvecSecours(requeteFeuille(texteEtudiant, { titre, idees }), { cle, modele: nom, fetch, delai, pause, relance, niveau: 'low' }, 'contestation');
   if (!estObjet(brut) || !Array.isArray(brut.idees)) throw new ErreurGemini('format');
   const connues = new Set(idees.map(i => i.id));
   const statuts = Object.fromEntries(idees.map(i => [i.id, 'absente']));
@@ -868,28 +902,28 @@ export async function corrigerFeuille(texteEtudiant, { titre, idees = [] } = {},
 }
 
 // Transcription d'une réponse orale (modèle de correction, rapide).
-export async function transcrireGemini(base64Wav, contexte = {}, { cle, modele, fetch, delai = 20000, pause } = {}) {
+export async function transcrireGemini(base64Wav, contexte = {}, { cle, modele, fetch, delai = 20000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.correction);
-  const { brut } = await appelerAvecSecours(requeteTranscription(base64Wav, contexte), { cle, modele: nom, fetch, delai, pause, niveau: 'minimal' }, 'correction');
+  const { brut } = await appelerAvecSecours(requeteTranscription(base64Wav, contexte), { cle, modele: nom, fetch, delai, pause, relance, niveau: 'minimal' }, 'correction');
   if (!estObjet(brut) || typeof brut.texte !== 'string') throw new ErreurGemini('format');
   return texte(brut.texte, 3000);
 }
 
 // Explication sur demande, avec le modèle de contestation (un cran au-dessus).
-export async function expliquerGemini(carte, demande = {}, { cle, modele, fetch, delai = 30000, pause } = {}) {
+export async function expliquerGemini(carte, demande = {}, { cle, modele, fetch, delai = 30000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
-  const { brut } = await appelerAvecSecours(requeteExplication(carte, demande), { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
+  const { brut } = await appelerAvecSecours(requeteExplication(carte, demande), { cle, modele: nom, fetch, delai, pause, relance, niveau: 'low' }, 'contestation');
   const explication = estObjet(brut) ? texte(brut.explication, 1500) : '';
   if (!explication) throw new ErreurGemini('format');
   return { explication, mnemo: texte(brut.mnemo, 300) };
 }
 
 // Petite requête sur le modèle de correction : toute réponse 200 prouve que la clé marche.
-export async function verifierCle({ cle, modele, fetch, delai = 15000, pause } = {}) {
+export async function verifierCle({ cle, modele, fetch, delai = 15000, pause, relance } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.correction);
   const requete = {
     contents: [{ role: 'user', parts: [{ text: 'Réponds simplement : OK' }] }],
     generationConfig: { maxOutputTokens: 16 },
   };
-  return appeler(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'minimal', analyser: false });
+  return appeler(requete, { cle, modele: nom, fetch, delai, pause, relance, niveau: 'minimal', analyser: false });
 }

@@ -6,4 +6,4 @@ export const CLES = {
   voixNom: 'rappel.voixNom', theme: 'rappel.theme', ecoute: 'rappel.ecoute',
 };
 export const OBJECTIF_DEFAUT = 60;
-export const VERSION = '2.2.0';
+export const VERSION = '2.2.1';

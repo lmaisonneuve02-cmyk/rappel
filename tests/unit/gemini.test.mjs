@@ -653,3 +653,41 @@ describe('feuille blanche', () => {
     await assert.rejects(corrigerFeuille('x', { idees }, opts(fauxFetch(succes({ bilan: 'x' })))), e => e.code === 'format');
   });
 });
+
+describe('course entre modèles (modèle lent)', () => {
+  test('le premier tarde : un second modèle part après « relance », sa réponse gagne et devient le modèle de la session', async () => {
+    oublierModeles();
+    const NOMS = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+    const appels = [];
+    const f = (url, options = {}) => {
+      appels.push(url);
+      if (url.includes('/models?')) {
+        return Promise.resolve(new Response(JSON.stringify({ models: NOMS.map(n => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) }), { status: 200 }));
+      }
+      if (url.includes('3.5-flash-lite')) {
+        // Ne répond jamais : seul l'abandon l'arrête.
+        return new Promise((_, ko) => options.signal?.addEventListener('abort', () => ko(new Error('abandon'))));
+      }
+      return Promise.resolve(new Response(JSON.stringify(succes(correctionJuste).corps), { status: 200 }));
+    };
+    const debut = Date.now();
+    const r = await corrigerGemini(carteFait, 'le parasympathique', {}, { cle: CLE, fetch: f, pause: 5, delai: 2000, relance: 30 });
+    assert.equal(r.verdict, 'juste');
+    assert.ok(Date.now() - debut < 1500, 'pas besoin d\'attendre la fin du délai');
+    assert.ok(appels.some(u => u.includes('2.5-flash-lite')));
+    // Ensuite : directement le modèle rapide.
+    const g = fauxFetch(succes(correctionJuste));
+    await corrigerGemini(carteFait, 'x', {}, { ...opts(g), delai: 2000, relance: 30 });
+    assert.ok(g.appels[0].url.includes('2.5-flash-lite'));
+    oublierModeles();
+  });
+
+  test('tous trop lents : erreur « delai » ; clé refusée : pas de course', async () => {
+    oublierModeles();
+    const lent = (url, options = {}) => (url.includes('/models?')
+      ? Promise.resolve(new Response(JSON.stringify({ models: [{ name: 'models/gemini-2.5-flash-lite', supportedGenerationMethods: ['generateContent'] }] }), { status: 200 }))
+      : new Promise((_, ko) => options.signal?.addEventListener('abort', () => ko(new Error('abandon')))));
+    await assert.rejects(corrigerGemini(carteFait, 'x', {}, { cle: CLE, fetch: lent, pause: 5, delai: 200, relance: 30 }), e => e.code === 'delai');
+    oublierModeles();
+  });
+});

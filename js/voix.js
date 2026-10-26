@@ -399,6 +399,9 @@ const COMMANDES = {
     'c est reparti'],
   'conteste': ['je conteste', 'contestation', 'je ne suis pas d accord', 'je suis pas d accord', 'pas d accord', 'conteste',
     'contester', 'je veux contester'],
+  'indice': ['indice', 'un indice', 'donne moi un indice', 'tu peux me donner un indice', 'aide moi', 'un peu d aide'],
+  'explique': ['explique', 'explique moi', 'explique-moi', 'explique moi ca', 'tu peux expliquer', 'tu peux m expliquer',
+    'explication', 'une explication', 'pourquoi', 'pourquoi ca'],
   'stop': ['arrete', 'arreter', 'arretes', 'stop', 'terminer', 'fin', 'on arrete', 'j arrete', 'je m arrete', 'on s arrete',
     'arrete tout', 'fin de la seance', 'terminer la seance', 'arreter la seance', 'quitter'],
 };

@@ -5,9 +5,10 @@ import { corriger, contester, opErreur } from '../correction.js';
 import { expliquerGemini } from '../gemini.js';
 import { corrigerLocal, indice, plafonnerIndice } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
-import { clozeParts, refText } from '../texte.js';
+import { clozeParts, refText, plainQ } from '../texte.js';
 import { choisirQcm } from '../qcm.js';
-import { Ecoute, reconnaissanceDisponible, messageEcoute } from '../voix.js';
+import { reconnaissanceDisponible, messageEcoute } from '../voix.js';
+import { ecouteGeminiDisponible, libererMicro } from '../ecoutegemini.js';
 import {
   h, vider, bouton, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
   verdictNoeud, VERDICTS, BADGES, imageSvg, nb, estTactile, aideVue, compterAide, empiler, depiler, bandeau, texteEncore, texteAtteint,
@@ -74,7 +75,8 @@ function ficheDe(donnees, carte, paquet) {
 }
 
 export function creer(ctx, params = {}) {
-  const micro = !!reconnaissanceDisponible(window);
+  // Micro : reconnaissance du navigateur, ou enregistrement transcrit par Gemini (ctx.creerEcoute).
+  const micro = !!reconnaissanceDisponible(window) || (ecouteGeminiDisponible(window) && !!ctx.cles().gemini);
   let donnees = ctx.donnees();
   const modeQcm = params.mode === 'qcm';
   const seance = new Seance({
@@ -133,20 +135,24 @@ export function creer(ctx, params = {}) {
   }
 
   // Bouton micro dans un champ : texte en direct, ajouté à ce qui est déjà écrit.
-  function brancherMicro(champ, statut, apres) {
+  function brancherMicro(champ, statut, apres, carte = null) {
     if (!micro) return null;
     const btn = h('button', { type: 'button', class: 'micro', 'aria-label': 'Répondre à voix haute', 'aria-pressed': 'false' }, icone('micro'));
     btn.addEventListener('click', async () => {
       if (ecoute?.active) { ecoute.arreter(); return; }
       const silence = Math.round((Number(ctx.reglages().voix?.silence) || 2.5) * 1000);
-      const e = ecoute = new Ecoute({ silence });
+      const e = ecoute = ctx.creerEcoute({ silence });
+      e.contexte = { question: carte ? plainQ(carte) : '' };
+      const parGemini = 'contexte' in e && 'finParole' in e;
+      e.addEventListener('niveau', ev => btn.style.setProperty('--niveau', ev.detail.toFixed(2)));
+      e.addEventListener('transcription', () => { statut.textContent = 'Transcription…'; });
       const base = champ.value.trim();
       const joindre = t => [base, String(t || '').trim()].filter(Boolean).join(base && /[.,;:!?]$/.test(base) ? ' ' : ' ');
       e.addEventListener('partiel', ev => { champ.value = joindre(ev.detail); champ.dispatchEvent(new Event('input')); });
       btn.classList.add('actif');
       btn.setAttribute('aria-pressed', 'true');
       btn.setAttribute('aria-label', "Arrêter l'écoute");
-      statut.textContent = "J'écoute… touche le micro pour arrêter.";
+      statut.textContent = parGemini ? "J'écoute… parle normalement ; je m'arrête après un silence, ou touche le micro." : "J'écoute… touche le micro pour arrêter.";
       statut.className = 'statut-micro statut-micro--actif';
       const texte = await e.demarrer();
       if (ecoute !== e && ecoute !== null) return;
@@ -236,7 +242,7 @@ export function creer(ctx, params = {}) {
     champ.addEventListener('input', () => {
       if (!ecoute?.active && statut.textContent && !statut.classList.contains('statut-micro--erreur')) statut.textContent = '';
     });
-    const btnMicro = brancherMicro(champ, statut, () => principal.focus({ preventScroll: true }));
+    const btnMicro = brancherMicro(champ, statut, () => principal.focus({ preventScroll: true }), carte);
 
     const montrerAide = !aideVue('premiere-carte', 3);
     if (montrerAide) compterAide('premiere-carte');
@@ -579,6 +585,7 @@ export function creer(ctx, params = {}) {
     etat = 'fin';
     verdictAffiche = null;
     arreterMicro();
+    libererMicro();
     actionEntree = null;
     majHaut();
     rendreFin();
@@ -696,6 +703,7 @@ export function creer(ctx, params = {}) {
       quitte = true;
       document.removeEventListener('keydown', clavier);
       arreterMicro();
+      libererMicro();
       if (entree) { const e = entree; entree = null; depiler(e); }
       if (etat !== 'fin' && seance.bilan.faites > 0) ctx.sync.pousser('fin-seance').catch(() => {});
     },

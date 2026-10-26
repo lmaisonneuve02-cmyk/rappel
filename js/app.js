@@ -4,6 +4,10 @@ import { Synchro } from './sync.js';
 import { ouvrirStockage } from './stockage.js';
 import { objectifDuJour, semaineEnCours } from './seance.js';
 import { creerIdf } from './texte.js';
+import { Ecoute } from './voix.js';
+import { EcouteGemini, ecouteGeminiDisponible } from './ecoutegemini.js';
+import { transcrireGemini } from './gemini.js';
+import { opErreur } from './correction.js';
 import { jourParis } from './temps.js';
 import { h, $, vider, icone, toast, lireLocal, ecrireLocal, lireJson, estTactile, ouvrirFeuille, bouton, nb } from './ui/commun.js';
 import * as accueil from './ui/accueil.js';
@@ -115,6 +119,21 @@ async function demarrer() {
     definirAppareil(nom) { ecrireLocal(CLES.appareil, String(nom || '').trim() || nomAuto()); },
     // Gemini pour la correction : clé de l'appareil, fetch du navigateur.
     gemini: () => ({ cle: lireLocal(CLES.gemini, ''), fetch: (url, options) => fetch(url, options) }),
+    // Écoute (26 oct.) : Gemini transcrit quand la clé et le réseau sont là ; sinon la reconnaissance du navigateur.
+    // silence : au moins 2,5 s (il réfléchit en parlant) ; ecoute.contexte = {question} avant chaque carte.
+    creerEcoute: ({ silence = 2500 } = {}) => {
+      const g = ctx.gemini();
+      const navigateur = lireLocal(CLES.ecoute, 'gemini') === 'navigateur';
+      if (navigateur || !g.cle || !ctx.enLigne() || !ecouteGeminiDisponible()) return new Ecoute({ silence });
+      const modele = sync.donnees().reglages?.modeles?.correction || undefined;
+      return new EcouteGemini({
+        silence: Math.max(2500, silence),
+        transcrire: (wav, contexte) => transcrireGemini(wav, contexte, { cle: g.cle, fetch: g.fetch, modele }).catch(e => {
+          if (e?.name === 'ErreurGemini') sync.ajouter(opErreur(e, { contexte: 'transcription', modele, maintenant: Date.now(), appareil: ctx.appareil }));
+          throw e;
+        }),
+      });
+    },
     idf() {
       const d = sync.donnees();
       const cle = d.ordre.join(',') + ':' + Object.keys(d.cartes).length;

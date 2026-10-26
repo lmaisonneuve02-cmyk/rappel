@@ -4,6 +4,7 @@ import { qcmProposables } from '../qcm.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
 import { reconnaissanceDisponible } from '../voix.js';
+import { ecouteGeminiDisponible } from '../ecoutegemini.js';
 import { h, vider, bouton, icone, bandeau, pastilles, nb, dateFr, aideVue, texteEncore, texteAtteint, texteSemaine } from './commun.js';
 
 const MIN_PAR_CARTE = 0.6;
@@ -11,8 +12,9 @@ let filtreMemo = { jour: '', filtre: 'tout' };   // le choix d'un paquet vaut ju
 
 const CODES_CLES = new Set(['jeton', 'droits', 'introuvable']);
 
-function mainsLibresPossible() {
-  return !!reconnaissanceDisponible(window) && 'speechSynthesis' in window;
+function mainsLibresPossible(ctx) {
+  const ecoute = !!reconnaissanceDisponible(window) || (ecouteGeminiDisponible(window) && !!ctx.cles().gemini);
+  return ecoute && 'speechSynthesis' in window;
 }
 
 // Ce que propose la journée, pour un filtre donné : révisions (pas encore répondues aujourd'hui),
@@ -180,7 +182,7 @@ export function creer(ctx, params = {}) {
 
     // Mains libres (si la voix est disponible), sinon l'astuce du clavier.
     if (r.total > 0) {
-      if (mainsLibresPossible()) {
+      if (mainsLibresPossible(ctx)) {
         blocs.push(h('div', { class: 'mains-libres-entree' },
           bouton('Mains libres', { icone: 'casque', classe: 'btn--large', onClick: () => ctx.aller('mainslibres', { filtre, direct: aideVue('mainslibres') }) }),
           h('p', { class: 'aide', text: 'Je lis les questions, tu réponds à voix haute.' })));

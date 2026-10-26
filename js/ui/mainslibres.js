@@ -1,8 +1,10 @@
 // Mains libres : écran sombre et calme, piloté par la machine à états MainsLibres (événement 'etat').
 import { Seance } from '../seance.js';
 import { MainsLibres } from '../mainslibres.js';
-import { Ecoute, Parole, verrouEcran } from '../voix.js';
-import { corriger, contester } from '../correction.js';
+import { Parole, verrouEcran } from '../voix.js';
+import { corriger, contester, opErreur } from '../correction.js';
+import { expliquerGemini } from '../gemini.js';
+import { libererMicro } from '../ecoutegemini.js';
 import { CLES } from '../config.js';
 import { plainQ } from '../texte.js';
 import {
@@ -10,7 +12,7 @@ import {
   texteEncore,
 } from './commun.js';
 
-const COMMANDES = ['je ne sais pas', 'répète', 'suivant', 'pause', 'je conteste', 'stop'];
+const COMMANDES = ['je ne sais pas', 'répète', 'indice', 'explique', 'suivant', 'pause', 'je conteste', 'stop'];
 
 function onde() {
   return h('div', { class: 'onde', 'aria-hidden': 'true' }, [1, 2, 3, 4, 5].map(() => h('span')));
@@ -123,7 +125,8 @@ export function creer(ctx, params = {}) {
     const r = ctx.reglages();
     const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout' });
     parole = new Parole({ vitesse: Number(r.voix?.vitesse) || 1, voixNom: lireLocal(CLES.voixNom, '') });
-    ecoute = new Ecoute({ silence: Math.round((Number(r.voix?.silence) || 2.5) * 1000) });
+    ecoute = ctx.creerEcoute({ silence: Math.round((Number(r.voix?.silence) || 2.5) * 1000) });
+    const g = ctx.gemini();
     ml = new MainsLibres({
       seance, parole, ecoute, fiches: donnees.fiches, appareil: ctx.appareil, maintenant: () => ctx.maintenant(),
       intro: !aideVue('mainslibres-intro'),
@@ -131,7 +134,19 @@ export function creer(ctx, params = {}) {
         carte, paquet, reponse, donnees: ctx.donnees(), gemini: ctx.gemini(), enLigne: ctx.enLigne(), idf: ctx.idf(), maintenant, appareil }),
       contester: avecCle ? args => contester({ ...args, donnees: ctx.donnees(), gemini: ctx.gemini(), enLigne: ctx.enLigne() }) : null,
       enregistrer: ops => { for (const op of ops || []) ctx.sync.ajouter(op); seance.majDonnees(ctx.sync.donnees()); },
+      // « Explique » sans commentaire sur la carte : Gemini.
+      expliquer: avecCle ? async ({ carte, reponse, verdict }) => {
+        try {
+          const x = await expliquerGemini(carte, { reponse, verdict }, { cle: g.cle, fetch: g.fetch, modele: ctx.donnees().reglages?.modeles?.contestation || undefined });
+          return [x.explication, x.mnemo && `Pour retenir : ${x.mnemo}`].filter(Boolean).join(' ');
+        } catch (e) {
+          if (e?.name === 'ErreurGemini') ctx.sync.ajouter(opErreur(e, { contexte: 'explication', maintenant: ctx.maintenant(), appareil: ctx.appareil }));
+          throw e;
+        }
+      } : null,
     });
+    // La question de la carte en cours aide Gemini à transcrire (vocabulaire), jamais la réponse.
+    ml.addEventListener('etat', e => { if ('contexte' in ecoute) ecoute.contexte = { question: e.detail.carte ? plainQ(e.detail.carte) : '' }; });
     compterAide('mainslibres-intro');
     ml.addEventListener('etat', e => { try { rendre(e.detail); } catch (err) { console.warn(err); } });
     vider(contenu, zoneEtat, zoneQuestion, zoneReponse, zoneVerdict, zoneFiche);
@@ -183,6 +198,7 @@ export function creer(ctx, params = {}) {
       try { ml?.arreter(); } catch { /* rien */ }
       try { parole?.arreter(); } catch { /* rien */ }
       try { ecoute?.annuler(); } catch { /* rien */ }
+      libererMicro();
       liberer?.().catch?.(() => {});
       if (entree) { const e = entree; entree = null; depiler(e); }
       if (!fini) ctx.sync.pousser('fin-seance').catch(() => {});

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   SCHEMA_CORRECTION, SCHEMA_CONTESTATION, SCHEMA_QCM, SCHEMA_REPONSE_QCM, ErreurGemini,
   requeteCorrection, requeteContestation, requeteGenerationQcm, requeteReponseQcm, reglagesModele, lireReponse,
-  corrigerGemini, contesterGemini, genererQcm, repondreQcm, verifierCle, classerModeles, oublierModeles, requeteExplication, expliquerGemini,
+  corrigerGemini, contesterGemini, genererQcm, repondreQcm, verifierCle, classerModeles, oublierModeles, requeteExplication, expliquerGemini, requeteTranscription, transcrireGemini,
 } from '../../js/gemini.js';
 
 const CLE = 'AQ.cle-de-test-123';
@@ -619,5 +619,19 @@ describe('explication sur demande', () => {
     assert.deepEqual(await expliquerGemini(carteFait, {}, opts(f)), { explication: 'Parce que.', mnemo: '' });
     assert.ok(f.appels[0].url.includes('flash'));
     await assert.rejects(expliquerGemini(carteFait, {}, opts(fauxFetch(succes({ explication: '' })))), e => e.code === 'format');
+  });
+});
+
+describe('transcription', () => {
+  test('audio WAV en ligne, question en contexte, jamais la réponse attendue', async () => {
+    const req = requeteTranscription('UklGRg==', { question: 'Quel ventricule ?' });
+    const parts = req.contents[0].parts;
+    assert.equal(parts[0].text, 'Question de la carte : Quel ventricule ?');
+    assert.deepEqual(parts[1], { inlineData: { mimeType: 'audio/wav', data: 'UklGRg==' } });
+    assert.match(req.systemInstruction.parts[0].text, /Ne corrige jamais le fond/);
+    const f = fauxFetch(succes({ texte: '  le VG  ' }));
+    assert.equal(await transcrireGemini('UklGRg==', {}, opts(f)), 'le VG');
+    assert.ok(f.appels[0].url.includes('flash-lite'));
+    await assert.rejects(transcrireGemini('x', {}, opts(fauxFetch(succes({ autre: 1 })))), e => e.code === 'format');
   });
 });

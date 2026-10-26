@@ -197,6 +197,7 @@ export async function ouvrir(navigateur, base, { theme = 'clair', jeton = true, 
           localStorage.setItem('rappel.jeton', 'github_pat_essai');   // = JETON
           localStorage.setItem('rappel.gemini', 'AQ.essai');
           localStorage.setItem('rappel.appareil', 'tel-essai');
+          localStorage.setItem('rappel.ecoute', 'navigateur');   // voix simulée : reconnaissance du navigateur
         }
       } catch { /* rien */ }
     });

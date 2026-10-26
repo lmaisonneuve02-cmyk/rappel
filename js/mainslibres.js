@@ -1,8 +1,9 @@
 // Mains libres : je lis la question, tu réponds à voix haute, je corrige et je dis le verdict.
 // Machine à états sans DOM : séance, correction, voix et enregistrement sont injectés.
 // L'interface suit l'événement 'etat' (detail : {phase, texte, carte, resultat, message, partiel, micro, …}).
-import { texteOral, plainQ, refText } from './texte.js';
+import { texteOral, plainQ, refText, normaliser } from './texte.js';
 import { commande, lettresQcm, estAccord } from './voix.js';
+import { ideesDe, plafonnerIndice } from './correcteur.js';
 
 const HORLOGE = {
   setTimeout: (f, ms) => globalThis.setTimeout(f, ms),
@@ -11,7 +12,7 @@ const HORLOGE = {
 
 // Ce que l'appli dit à voix haute (sans guillemets : la synthèse les lit mal).
 const ORAL = {
-  intro: 'Je lis chaque question, tu réponds à voix haute. Si besoin, dis : répète, je ne sais pas, suivant, ou pause. ',
+  intro: 'Je lis, tu réponds. Tu peux me couper. Si besoin : répète, indice, je ne sais pas, suivant, pause. ',
   rienEntendu: "Je n'ai rien entendu. Réponds, ou dis : je ne sais pas.",
   pauseSilence: "Je n'entends rien : je mets en pause. Touche Reprendre quand tu veux.",
   pauseVoix: 'Pause. Touche Reprendre pour continuer.',
@@ -26,6 +27,10 @@ const ORAL = {
   lettresIncomprises: "Je n'ai pas compris, répète les lettres.",
   lettresAbandon: "Je n'ai toujours pas compris. On passe à la suite.",
   rienEntenduQcm: "Je n'ai rien entendu. Dis les lettres, par exemple : A et C.",
+  pasDIndice: "Pas d'indice pour cette carte.",
+  indiceDeja: "Tu as déjà l'indice. Réponds, ou dis : je ne sais pas.",
+  pasDExplication: "Je n'ai pas d'explication de plus pour cette carte.",
+  explicationImpossible: "Je n'ai pas pu obtenir d'explication. Tu pourras la demander à l'écran.",
 };
 
 // Ce que l'écran affiche en grand (état en cours, ce qu'on attend de toi).
@@ -35,8 +40,9 @@ const MESSAGES = {
   rienEntendu: "Je n'ai rien entendu.",
   correction: 'Correction…',
   passe: 'Carte passée : elle reviendra plus tard.',
-  apresVerdict: 'Dis « répète » pour réentendre, ou attends la suite.',
-  apresVerdictConteste: 'Dis « je conteste » si tu n\'es pas d\'accord, ou attends la suite.',
+  apresVerdict: 'Dis « répète », « explique », ou attends la suite.',
+  apresVerdictConteste: 'Dis « répète », « explique », « je conteste », ou attends la suite.',
+  explication: 'Explication…',
   pourquoi: 'Dis pourquoi tu contestes…',
   verification: 'Je vérifie ta contestation…',
   fiche: 'Nouvelle fiche : lis-la à l\'écran.',
@@ -92,22 +98,34 @@ const sansPoint = t => String(t || '').trim().replace(/[.\s]+$/, '');
 const minuscule = t => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(t) ? t[0].toLowerCase() + t.slice(1) : t);
 const finPhrase = t => (/[.!?…]$/.test(t) ? t : t + '.');
 
-// Verdict dit après la correction.
+// Verdict dit après la correction (26 oct. : la réponse complète en partiel comme en faux, sans
+// « correction hors ligne », que l'écran montre).
 export function texteVerdict(resultat, carte) {
   const r = resultat || {};
-  let t;
-  if (r.verdict === 'juste') t = 'Juste.';
-  else if (r.verdict === 'partiel') {
+  const ref = tronquer(String(refText(carte || {}) || '').replace(/\s*·\s*/g, ', '), 45);
+  const complete = ref ? ` La réponse complète : ${finPhrase(ref)}` : '';
+  if (r.verdict === 'juste') return 'Juste.';
+  if (r.verdict === 'partiel') {
     const manque = sansPoint((r.idees_manquantes || [])[0]);
     const erreur = sansPoint((r.erreurs || [])[0]);
-    t = manque ? `Partiel : il manquait ${minuscule(manque)}.` : erreur ? `Partiel : ${minuscule(erreur)}.` : 'Partiel.';
-  } else {
-    const ref = tronquer(String(refText(carte || {}) || '').replace(/\s*·\s*/g, ', '));
-    const debut = r.correcteur === 'je-ne-sais-pas' ? '' : 'Faux. ';
-    t = ref ? `${debut}La réponse était : ${finPhrase(ref)}` : 'Faux.';
+    const pourquoi = /indice/.test(r.explication || '') && !manque && !erreur ? " Juste, mais avec l'indice." : manque
+      ? ` Il manquait ${minuscule(manque)}.` : erreur ? ` ${finPhrase(erreur[0].toUpperCase() + erreur.slice(1))}` : '';
+    return `Partiel.${pourquoi}${complete}`;
   }
-  if (r.correcteur === 'hors-ligne') t += ' Correction hors ligne.';
-  return t;
+  const debut = r.correcteur === 'je-ne-sais-pas' ? '' : 'Faux. ';
+  return ref ? `${debut}La réponse était : ${finPhrase(ref)}` : 'Faux.';
+}
+
+// Indice à l'oral : le nombre de mots de la première idée et leurs initiales (mots de 3 lettres ou plus).
+export function indiceOral(carte) {
+  const idees = ideesDe(carte);
+  const idee = idees.find(i => i.obligatoire) || idees[0];
+  if (!idee) return '';
+  const mots = normaliser(idee.texte).split(' ').filter(m => m.length >= 3);
+  if (!mots.length) return '';
+  const initiales = mots.slice(0, 4).map(m => m[0].toUpperCase());
+  const liste = initiales.length > 1 ? `${initiales.slice(0, -1).join(', ')} et ${initiales.at(-1)}` : initiales[0];
+  return mots.length > 1 ? `Indice : ${mots.length} mots importants, qui commencent par ${liste}.` : `Indice : un mot qui commence par ${liste}.`;
 }
 
 function libelleVerdict(r) {
@@ -156,11 +174,12 @@ export class MainsLibres extends EventTarget {
   // enregistrer(ops) ; qcm : {questions, scorer(qcm, cochees), ligne?({qcm, cochees, resultat, duree, maintenant, appareil})}
   // fiches : {id: fiche} pour dire le titre de la micro-fiche.
   constructor({ seance = null, corriger, parole, ecoute, enregistrer = () => {}, contester = null, qcm = null, fiches = {},
-    maintenant = Date.now, appareil, horloge = HORLOGE, intro = true, delaiMicro = 250, ecouteVerdict = 3000,
-    attenteFiche = 15000, attenteQcm = 10000 } = {}) {
+    maintenant = Date.now, appareil, horloge = HORLOGE, intro = true, delaiMicro = 250, ecouteVerdict = 5000,
+    attenteFiche = 15000, attenteQcm = 10000, expliquer = null, pauseVerdict = 600 } = {}) {
     super();
+    // expliquer({carte, reponse, verdict}) → texte : explication de Gemini quand la carte n'a pas de commentaire.
     Object.assign(this, { seance, corriger, parole, ecoute, enregistrer, contester, qcm, fiches, maintenant, appareil, horloge,
-      intro, delaiMicro, ecouteVerdict, attenteFiche, attenteQcm });
+      intro, delaiMicro, ecouteVerdict, attenteFiche, attenteQcm, expliquer, pauseVerdict });
     this._ctx = { ...VIDE };
     this._dernier = null;
     this._gen = 0;
@@ -254,6 +273,7 @@ export class MainsLibres extends EventTarget {
   }
 
   _couper() {
+    this._anticipee = null;
     try { this.parole.arreter(); } catch { /* rien */ }
     try { this.ecoute.annuler(); } catch { /* rien */ }
     const a = this._attenteGeste;
@@ -265,9 +285,25 @@ export class MainsLibres extends EventTarget {
     return ms > 0 ? new Promise(r => this.horloge.setTimeout(r, ms)) : Promise.resolve();
   }
 
-  async _dire(phase, oral, extra) {
+  // ecouter : {attente} pour écouter pendant la lecture (écoute par Gemini seulement) : s'il parle,
+  // la voix se tait et sa réponse est gardée pour le prochain _ecouter().
+  async _dire(phase, oral, extra, { ecouter = null } = {}) {
     this._phase(phase, extra);
     const gen = this._gen;
+    const ec = this.ecoute;
+    if (ecouter && typeof ec?.finParole === 'function' && !ec.active) {
+      const couper = () => { try { this.parole.arreter(); } catch { /* rien */ } };
+      ec.addEventListener('debut', couper, { once: true });
+      this._anticipee = ec.demarrer({ attente: ecouter.attente, pendantParole: true });
+      try {
+        await this.parole.dire(oral);
+      } finally {
+        ec.removeEventListener('debut', couper);
+      }
+      this._verifier(gen);
+      ec.finParole();
+      return;
+    }
     await this.parole.dire(oral);
     this._verifier(gen);
   }
@@ -282,10 +318,18 @@ export class MainsLibres extends EventTarget {
   // facultatif : une erreur ou un refus donne simplement « rien entendu ».
   async _ecouter({ attente, facultatif = false } = {}) {
     const gen = this._gen;
-    await this._attendre(this.delaiMicro);
-    this._verifier(gen);
     const options = attente ? { attente } : undefined;
-    let texte = await this.ecoute.demarrer(options);
+    let texte;
+    if (this._anticipee) {
+      // Écoute déjà lancée pendant la lecture.
+      const p = this._anticipee;
+      this._anticipee = null;
+      texte = await p;
+    } else {
+      await this._attendre(this.delaiMicro);
+      this._verifier(gen);
+      texte = await this.ecoute.demarrer(options);
+    }
     this._verifier(gen);
     let err = this._erreurMicro();
     if (err && CODES_GESTE.has(err.code)) {
@@ -492,7 +536,7 @@ export class MainsLibres extends EventTarget {
     for (;;) {
       if (lire) {
         ctx.debut = this.maintenant();
-        await this._dire('question', this._prendreIntro() + oral, { texte: affiche, message: MESSAGES.question });
+        await this._dire('question', this._prendreIntro() + oral, { texte: affiche, message: MESSAGES.question }, { ecouter: {} });
         lire = false;
       }
       this._phase('ecoute', { texte: affiche, message: MESSAGES.ecoute, micro: true });
@@ -505,6 +549,12 @@ export class MainsLibres extends EventTarget {
       vides = 0;
       const cmd = commande(reponse);
       if (cmd === 'repete' || cmd === 'reprendre') { lire = true; continue; }
+      if (cmd === 'indice') {
+        const dit = ctx.indice ? ORAL.indiceDeja : indiceOral(carte) || ORAL.pasDIndice;
+        if (!ctx.indice && dit !== ORAL.pasDIndice) ctx.indice = true;
+        await this._dire('ecoute', dit, { texte: affiche, message: MESSAGES.ecoute }, { ecouter: {} });
+        continue;
+      }
       if (cmd === 'pause') throw this._pauseVoix();
       if (cmd === 'stop') throw this._stopVoix();
       if (cmd === 'conteste') {
@@ -537,6 +587,7 @@ export class MainsLibres extends EventTarget {
         resultat = r?.resultat ?? r;
         ops = r?.ops ?? [];
         if (!resultat?.verdict) throw new Error('correction vide');
+        if (ctx.indice) resultat = plafonnerIndice(resultat);
       } catch {
         this.seance.passer();
         ctx.stade = 'fini';
@@ -547,7 +598,7 @@ export class MainsLibres extends EventTarget {
     const t = this.maintenant();
     const note = this.seance.noter({
       verdict: resultat.verdict, correcteur: resultat.correcteur, reponse, duree: Math.max(0, t - (ctx.debut ?? t)),
-      confiance: resultat.confiance, maintenant: t, appareil: this.appareil,
+      confiance: resultat.confiance, indice: !!ctx.indice, maintenant: t, appareil: this.appareil,
     });
     Object.assign(ctx, { resultat, reponse, note, stade: 'verdict' });
     this._c.reponses++;
@@ -560,13 +611,18 @@ export class MainsLibres extends EventTarget {
     for (;;) {
       const texte = texteVerdict(ctx.resultat, carte);
       const base = { texte, resultat: ctx.resultat, reponse: ctx.reponse };
-      await this._dire('verdict', pourOral(texte), { ...base, message: libelleVerdict(ctx.resultat) });
+      await this._dire('verdict', pourOral(texte), { ...base, message: libelleVerdict(ctx.resultat) }, { ecouter: { attente: this.ecouteVerdict } });
+      if (!this._anticipee) await this._attendre(this.pauseVerdict);
       const peutContester = !!this.contester && !ctx.conteste && ctx.resultat.verdict !== 'juste'
-        && ctx.resultat.correcteur !== 'je-ne-sais-pas';
+        && ctx.resultat.correcteur !== 'je-ne-sais-pas' && !(ctx.indice && ctx.resultat.verdict === 'partiel');
       this._phase('attente-commande', { ...base, micro: true, message: peutContester ? MESSAGES.apresVerdictConteste : MESSAGES.apresVerdict });
       const t = await this._ecouter({ attente: this.ecouteVerdict, facultatif: true });
       const cmd = commande(t);
       if (cmd === 'repete') continue;
+      if (cmd === 'explique') {
+        await this._expliquer(ctx, base);
+        continue;
+      }
       ctx.stade = 'fini';
       if (cmd === 'pause') throw this._pauseVoix();
       if (cmd === 'stop') throw this._stopVoix();
@@ -576,6 +632,23 @@ export class MainsLibres extends EventTarget {
       }
       return;
     }
+  }
+
+  // « Explique » : le commentaire de la carte (et son moyen mnémotechnique), sinon l'explication de Gemini.
+  async _expliquer(ctx, base) {
+    const { carte } = ctx.etape;
+    const gen = this._gen;
+    let dit = [carte.commentaire, carte.mnemo && `Pour retenir : ${carte.mnemo}`].filter(Boolean).map(t => finPhrase(sansPoint(t))).join(' ');
+    if (!dit && this.expliquer) {
+      this._phase('correction', { ...base, message: MESSAGES.explication });
+      try {
+        dit = await this.expliquer({ carte, reponse: ctx.reponse, verdict: ctx.resultat?.verdict });
+      } catch {
+        dit = ORAL.explicationImpossible;
+      }
+      this._verifier(gen);
+    }
+    await this._dire('verdict', pourOral(dit || ORAL.pasDExplication), { ...base, texte: dit || base.texte, message: MESSAGES.explication }, { ecouter: { attente: this.ecouteVerdict } });
   }
 
   async _contestation(ctx) {

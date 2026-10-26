@@ -371,7 +371,7 @@ select.champ-texte { appearance: auto; }
   display: grid; place-items: center; border: 1.5px solid var(--rule); background: var(--surface); color: var(--art);
 }
 .micro .icone { width: 24px; height: 24px; }
-.micro.actif { background: var(--art); border-color: var(--art); color: var(--sur-art); animation: pouls 1.4s ease-out infinite; }
+.micro.actif { background: var(--art); border-color: var(--art); color: var(--sur-art); animation: pouls 1.4s ease-out infinite; box-shadow: 0 0 0 calc(var(--niveau, 0) * 14px) color-mix(in srgb, var(--art) 30%, transparent); }
 .statut-micro { min-height: 1.3em; font-size: 0.93rem; color: var(--muted); }
 .statut-micro:empty { min-height: 0; }
 .statut-micro--actif { color: var(--art); font-weight: 700; }

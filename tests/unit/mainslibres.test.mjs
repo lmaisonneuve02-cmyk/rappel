@@ -1,7 +1,7 @@
 // Mains libres : machine à états avec séance, correction, voix et enregistrement simulés.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MainsLibres, texteVerdict, texteQcm } from '../../js/mainslibres.js';
+import { MainsLibres, texteVerdict, texteQcm, indiceOral } from '../../js/mainslibres.js';
 import { scorer } from '../../js/qcm.js';
 import { Seance } from '../../js/seance.js';
 
@@ -100,15 +100,25 @@ function quand(ml, phase, action) {
 
 // --- Textes ---
 
-test('texteVerdict : juste, partiel (1re idée manquante), faux tronqué, hors ligne', () => {
+test('texteVerdict : juste, partiel (ce qui manquait + réponse complète), faux tronqué, sans « hors ligne »', () => {
   assert.equal(texteVerdict({ verdict: 'juste', correcteur: 'gemini' }, C1), 'Juste.');
-  assert.equal(texteVerdict({ verdict: 'partiel', idees_manquantes: ['Le nerf phrénique.', 'C4'] }, C1), 'Partiel : il manquait le nerf phrénique.');
+  assert.equal(texteVerdict({ verdict: 'partiel', idees_manquantes: ['Le nerf phrénique.', 'C4'] }, C1),
+    `Partiel. Il manquait le nerf phrénique. La réponse complète : ${C1.a}`);
+  assert.equal(texteVerdict({ verdict: 'partiel', explication: "Juste, mais avec l'indice : compté partiel." }, C2),
+    "Partiel. Juste, mais avec l'indice. La réponse complète : La valve mitrale.");
   assert.equal(texteVerdict({ verdict: 'faux', correcteur: 'local' }, C2), 'Faux. La réponse était : La valve mitrale.');
-  assert.equal(texteVerdict({ verdict: 'juste', correcteur: 'hors-ligne' }, C1), 'Juste. Correction hors ligne.');
-  const longue = carte('c3', 'Q ?', Array.from({ length: 40 }, (_, i) => `mot${i}`).join(' '));
+  assert.equal(texteVerdict({ verdict: 'juste', correcteur: 'hors-ligne' }, C1), 'Juste.');
+  const longue = carte('c3', 'Q ?', Array.from({ length: 60 }, (_, i) => `mot${i}`).join(' '));
   const t = texteVerdict({ verdict: 'faux' }, longue);
-  assert.match(t, /^Faux\. La réponse était : mot0 .* mot24…$/);
-  assert.ok(t.split(' ').length <= 31);
+  assert.match(t, /^Faux\. La réponse était : mot0 .* mot44…$/);
+  assert.ok(t.split(' ').length <= 51);
+});
+
+test('indiceOral : nombre de mots importants et initiales', () => {
+  assert.equal(indiceOral({ id: 'i1', type: 'fait', q: 'Q ?', a: 'Le ventricule gauche.', bareme: { idees: [{ id: 'k1', texte: 'ventricule gauche', formulations: ['VG', 'v g'], obligatoire: true }] } }),
+    'Indice : 2 mots importants, qui commencent par V et G.');
+  assert.equal(indiceOral({ id: 'i2', type: 'cloze', q: 'Le {{sympathique}} accélère.' }), 'Indice : un mot qui commence par S.');
+  assert.equal(indiceOral({ id: 'i3', type: 'fait', q: 'Q ?', a: '' }), '');
 });
 
 test('texteQcm : points et bonnes lettres', () => {
@@ -119,7 +129,7 @@ test('texteQcm : points et bonnes lettres', () => {
 
 // --- Déroulé ---
 
-test('deux cartes : juste puis faux ; micro ouvert 250 ms après la voix ; écoute de 3 s après le verdict', async () => {
+test('deux cartes : juste puis faux ; micro ouvert 250 ms après la voix ; écoute de 5 s après le verdict', async () => {
   const m = monter({ etapes: [etapeCarte(C1, 1), etapeCarte(C2, 2)], script: ['le nerf phrénique', '', 'la tricuspide', ''] });
   const bilan = await m.ml.demarrer();
   assert.deepStrictEqual(m.parole.dits, [
@@ -128,8 +138,8 @@ test('deux cartes : juste puis faux ; micro ouvert 250 ms après la voix ; écou
   assert.deepStrictEqual(m.seance.notes.map(n => [n.carte, n.verdict, n.correcteur, n.reponse]), [
     ['c1', 'juste', 'gemini', 'le nerf phrénique'], ['c2', 'faux', 'gemini', 'la tricuspide'],
   ]);
-  assert.deepStrictEqual(m.ecoute.appels, [undefined, { attente: 3000 }, undefined, { attente: 3000 }]);
-  assert.deepStrictEqual(m.delais, [250, 250, 250, 250]);
+  assert.deepStrictEqual(m.ecoute.appels, [undefined, { attente: 5000 }, undefined, { attente: 5000 }]);
+  assert.deepStrictEqual(m.delais, [250, 600, 250, 250, 600, 250]);   // 600 ms de pause après chaque verdict
   assert.deepStrictEqual(m.enregistres.map(o => o.type), ['carnet', 'reponse', 'carnet', 'reponse']);
   const phases = m.phases();
   for (const p of ['question', 'ecoute', 'correction', 'verdict', 'attente-commande']) assert.ok(phases.includes(p), p);
@@ -331,4 +341,53 @@ test('QCM : deux essais incompris → on passe à la suite', async () => {
   const bilan = await m.ml.demarrer();
   assert.ok(m.parole.dits.includes("Je n'ai toujours pas compris. On passe à la suite."));
   assert.equal(bilan.qcm, 0);
+});
+
+// --- Nouveautés du 26 oct. : indice, explique, écoute pendant la lecture ---
+
+// Écoute par Gemini simulée : finParole, 'debut' ; « coupe » = il parle pendant la lecture.
+class FausseEcouteGemini extends FausseEcoute {
+  constructor(script) { super(script); this.finsParole = 0; this.active = false; }
+  demarrer(options) {
+    const coupe = this.script[0]?.coupe;
+    if (coupe) { this.script[0] = coupe; queueMicrotask(() => this.dispatchEvent(new Event('debut'))); }
+    return super.demarrer(options);
+  }
+  finParole() { this.finsParole++; }
+}
+
+test('indice : initiales dites, réponse juste plafonnée à partiel, ligne indice ; pas de contestation', async () => {
+  const contester = async () => { throw new Error('ne doit pas être appelé'); };
+  const m = monter({ etapes: [etapeCarte(C1, 1, 1)], script: ['indice', 'le nerf phrénique', 'je conteste', ''], contester });
+  await m.ml.demarrer();
+  assert.deepStrictEqual(m.parole.dits.slice(0, 3), [C1.q, 'Indice : 2 mots importants, qui commencent par N et P.',
+    `Partiel. Juste, mais avec l'indice. La réponse complète : ${C1.a}`]);
+  assert.deepStrictEqual([m.seance.notes[0].verdict, m.seance.notes[0].indice], ['partiel', true]);
+});
+
+test('explique : le commentaire et le moyen mnémotechnique ; sans commentaire, Gemini', async () => {
+  const C3 = { ...C1, commentaire: 'Il naît de C3, C4 et C5.', mnemo: 'C3, 4, 5 keep the diaphragm alive' };
+  const m = monter({ etapes: [etapeCarte(C3, 1, 1)], script: ['le nerf phrénique', 'explique', ''] });
+  await m.ml.demarrer();
+  assert.equal(m.parole.dits[2], 'Il naît de C3, C4 et C5. Pour retenir : C3, 4, 5 keep the diaphragm alive.');
+  const demandes = [];
+  const m2 = monter({ etapes: [etapeCarte(C2, 1, 1)], script: ['la tricuspide', 'pourquoi', ''],
+    expliquer: async d => { demandes.push(d); return 'La mitrale a deux valves, comme une mitre.'; } });
+  await m2.ml.demarrer();
+  assert.equal(m2.parole.dits[2], 'La mitrale a deux valves, comme une mitre.');
+  assert.deepStrictEqual([demandes[0].carte.id, demandes[0].reponse, demandes[0].verdict], ['c2', 'la tricuspide', 'faux']);
+});
+
+test('écoute par Gemini : écoute pendant la lecture ; s\'il parle, la voix se tait', async () => {
+  const s = new FausseSeance([etapeCarte(C1, 1, 1)]);
+  const parole = new FausseParole();
+  const ecoute = new FausseEcouteGemini([{ coupe: 'le nerf phrénique' }, '']);
+  const horloge = { setTimeout: (f) => { queueMicrotask(f); return 0; }, clearTimeout: () => {} };
+  const ml = new MainsLibres({ seance: s, corriger: correcteur({ c1: 'le nerf phrénique' }), parole, ecoute, intro: false, maintenant: () => T, appareil: 'test', horloge });
+  ecoute.surVide = () => ml.arreter();
+  await ml.demarrer();
+  assert.deepStrictEqual(ecoute.appels.map(a => a?.pendantParole), [true, true]);
+  assert.ok(parole.arrets >= 1, 'la voix est coupée');
+  assert.ok(ecoute.finsParole >= 1);
+  assert.equal(s.notes[0].verdict, 'juste');
 });

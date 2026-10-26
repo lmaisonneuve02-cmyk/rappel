@@ -32,7 +32,7 @@ test('mains libres : la question est lue, la réponse dictée est corrigée, le 
     const dits = () => page.evaluate(() => window.__dits.slice());
     assert.ok((await dits()).join(' ').includes(texteQuestion), 'la question est dite à voix haute');
     assert.match(await texte(page.locator('.seance-haut__position')), /^Carte 1 sur 5$/);
-    assert.equal(await texte(page.locator('.ml-commandes')), 'Tu peux dire : je ne sais pas · répète · suivant · pause · je conteste · stop');
+    assert.equal(await texte(page.locator('.ml-commandes')), 'Tu peux dire : je ne sais pas · répète · indice · explique · suivant · pause · je conteste · stop');
     await verifierEcran(page, 'mains-libres-ecoute');
 
     // Réponse dictée → correction → verdict dit.

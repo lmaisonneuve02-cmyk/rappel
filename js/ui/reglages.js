@@ -190,9 +190,21 @@ export function creer(ctx, params = {}) {
       reglerNombre({ id: 'r-vitesse', libelle: 'Vitesse de lecture', valeur: vitesse, min: 0.5, max: 2, pas: 0.1, decimales: 1, unite: ' ×',
         onChange: v => { vitesse = v; enregistrer({ voix: { ...ctx.reglages().voix, ...(enCours?.voix || {}), vitesse: v } }); } }),
       h('div', { class: 'rang-boutons rang-boutons--gauche' }, ecouter),
+      blocReconnaissance(),
       reglerNombre({ id: 'r-silence', libelle: 'Silence avant de corriger', aide: 'Combien de temps j\'attends après ta dernière parole.', valeur: voix.silence || 2.5, min: 1, max: 6, pas: 0.5, decimales: 1, unite: ' s',
         onChange: v => enregistrer({ voix: { ...ctx.reglages().voix, ...(enCours?.voix || {}), silence: v } }) }),
     ];
+  }
+
+  // --- Reconnaissance vocale (26 oct.) : Gemini par défaut, navigateur en secours (hors ligne) ---
+  function blocReconnaissance() {
+    const actuel = lireLocal(CLES.ecoute, 'gemini');
+    const options = [['gemini', 'Gemini'], ['navigateur', 'Navigateur']];
+    return h('fieldset', { class: 'segments' }, h('legend', { class: 'reglage__libelle', text: 'Reconnaissance de la voix (sur cet appareil)' }),
+      h('div', { class: 'segments__rang' }, options.map(([v, libelle]) => h('label', { class: 'segment' },
+        h('input', { type: 'radio', name: 'ecoute', value: v, checked: actuel === v, onchange: () => ecrireLocal(CLES.ecoute, v === 'gemini' ? '' : v) }),
+        h('span', { text: libelle })))),
+      h('p', { class: 'aide', text: 'Gemini comprend mieux les termes médicaux et ne coupe pas ; il lui faut la clé et le réseau, sinon le navigateur prend le relais.' }));
   }
 
   // --- Apparence ---

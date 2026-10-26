@@ -10,6 +10,9 @@ const RECUL_FAUX = 4;   // une carte fausse revient 4 positions plus loin (comme
 // Jour du changement de règle (16 oct. 2026, règle notée par l'utilisateur) : seul le total compte,
 // car Rappel 2 lui avait servi les nouvelles cartes en premier ce jour-là.
 export const JOURS_TOTAL_SEUL = new Set(['2026-10-16']);
+// QCM des cartes (décision du 26 oct. 2026) : une carte répondue seulement en QCM ce jour-là compte
+// dans l'objectif, mais au plus QCM_MAX par jour (révisions d'abord) ; l'appli n'en propose pas plus.
+export const QCM_MAX = 20;
 
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 // Compteur du bilan qui correspond à un verdict (même règle que noter : par la note).
@@ -87,16 +90,30 @@ export function nouvellesDuJour(donnees, maintenant) {
 }
 
 // Cartes du jour (règle du 16 oct. 2026) : cartes distinctes répondues aujourd'hui, nouvelles et révisions
-// (en avance comprises). Une carte ratée qui revient compte une fois ; contestations et QCM exclus.
+// (en avance comprises). Une carte ratée qui revient compte une fois ; contestations et QCM de la fac exclus.
 // revisions : cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'est nouvelle).
+// QCM des cartes (26 oct.) : une carte dont toutes les lignes du jour sont `mode: 'qcm'` ne compte que dans
+// la limite de QCM_MAX, révisions d'abord ; qcm = ces cartes (toutes), qcmComptees = celles qui comptent.
 export function cartesDuJour(donnees, maintenant) {
-  const cartes = new Set(), nouvelles = new Set();
+  const toutes = new Set(), nouvelles = new Set(), ecrites = new Set();
   for (const l of lignesDuJour(donnees, maintenant)) {
-    cartes.add(cleLigne(l));
-    if (l.nouvelle === true) nouvelles.add(cleLigne(l));
+    const k = cleLigne(l);
+    toutes.add(k);
+    if (l.nouvelle === true) nouvelles.add(k);
+    if (l.mode !== 'qcm') ecrites.add(k);
   }
-  return { cartes: cartes.size, nouvelles: nouvelles.size, revisions: cartes.size - nouvelles.size };
+  const qcm = [...toutes].filter(k => !ecrites.has(k));
+  const qcmNouvelles = qcm.filter(k => nouvelles.has(k)).length;
+  const qcmRevisions = Math.min(QCM_MAX, qcm.length - qcmNouvelles);
+  const qcmComptees = qcmRevisions + Math.min(QCM_MAX - qcmRevisions, qcmNouvelles);
+  const nouvellesEcrites = [...ecrites].filter(k => nouvelles.has(k)).length;
+  const revisions = ecrites.size - nouvellesEcrites + qcmRevisions;
+  const cartes = ecrites.size + qcmComptees;
+  return { cartes, nouvelles: cartes - revisions, revisions, qcm: qcm.length, qcmComptees };
 }
+
+// QCM des cartes encore possibles aujourd'hui (0 à QCM_MAX).
+export const qcmRestants = (donnees, maintenant) => Math.max(0, QCM_MAX - cartesDuJour(donnees, maintenant).qcm);
 
 // Révisions du jour encore à faire : cartes dues au plus tard aujourd'hui et pas encore répondues aujourd'hui.
 export function revisionsRestantes(donnees, maintenant) {
@@ -178,8 +195,10 @@ function sansVide(objet) {
 
 export class Seance {
   // maintenant : ms, ou une fonction qui renvoie l'heure (horloge injectée).
-  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, rnd = Math.random }) {
+  // mode 'qcm' : QCM des cartes, au plus `max` cartes (qcmRestants).
+  constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, mode = 'ecrit', max = Infinity, rnd = Math.random }) {
     this.donnees = donnees;
+    this.mode = mode === 'qcm' ? 'qcm' : 'ecrit';
     this.horloge = typeof maintenant === 'function' ? maintenant : null;
     const t0 = this.horloge ? this.horloge() : maintenant;
     this.debut = t0;
@@ -205,7 +224,7 @@ export class Seance {
     const cle = el => this.carteDe(el)?.fiche || el.paquet;
     revisions = espacer(melanger(revisions, rnd), cle);
     // Révisions d'abord, puis les nouvelles cartes pour compléter (jusqu'à nouvellesParJour).
-    this.file = [...revisions, ...nouvellesPossibles(donnees, t0, filtre)];
+    this.file = [...revisions, ...nouvellesPossibles(donnees, t0, filtre)].slice(0, Math.max(0, max));
   }
 
   // Nouvelles données (synchro) : la séance les relit à chaque étape.
@@ -275,7 +294,8 @@ export class Seance {
     this.pauseA = Math.max(this.pauseA, this.faites) + this.pas();
   }
 
-  noter({ verdict, correcteur, reponse = '', duree, confiance, indice, maintenant, appareil = 'inconnu' }) {
+  // mode : celui de la séance par défaut ('ecrit' quand une carte sans leurre possible s'écrit en séance QCM).
+  noter({ verdict, correcteur, reponse = '', duree, confiance, indice, mode = this.mode, maintenant, appareil = 'inconnu' }) {
     const el = this.courant();
     if (!el) throw new Error('La séance est terminée : plus aucune carte à noter.');
     const t = maintenant ?? (this.horloge ? this.horloge() : Date.now());
@@ -287,6 +307,7 @@ export class Seance {
     const ligne = sansVide({
       id: `${appareil}-${t}`, ts: t, t: isoParis(t), appareil, paquet: el.paquet, carte: el.carteId,
       reponse, verdict, correcteur, note, nouvelle: !etatAvant, duree, confiance, indice: indice || undefined,
+      mode: mode === 'qcm' ? 'qcm' : undefined,
     });
     const ops = [
       { type: 'srs', paquet: el.paquet, carte: el.carteId, etat: etatApres },

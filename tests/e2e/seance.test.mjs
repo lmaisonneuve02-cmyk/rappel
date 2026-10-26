@@ -343,6 +343,49 @@ test('toujours répondre : pas d\'auto-évaluation, « Indice » plafonné à «
 });
 
 
+test('QCM rapide : 4 réponses mélangées, bonne réponse = partiel, lignes « mode: qcm »', async () => {
+  const o = await ouvrir(navigateur, serveur.base);
+  const { page, faux } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
+    await page.getByText('Jour sans élan ? Choisis parmi 4 réponses. Compte « partiel », 20 cartes au plus par jour (encore 20).').waitFor();
+    await clic(page, 'QCM rapide (5)');
+    // 1) Bonne réponse : partiel.
+    await page.locator('.choix-qcm__btn').first().waitFor();
+    const c1 = await question(page);
+    const props = await page.locator('.choix-qcm__texte').allTextContents();
+    assert.ok(props.length >= 2 && props.includes(refText(c1)), JSON.stringify(props));
+    assert.equal(await page.locator('#reponse').count(), 0, 'pas de champ à remplir');
+    await page.getByText("Une bonne réponse compte « partiel ». L'ordre change à chaque fois.").waitFor();
+    await verifierEcran(page, 'qcm-rapide');
+    await page.locator('.choix-qcm__btn', { hasText: refText(c1) }).click();
+    assert.equal(await mot(page), 'Partiel');
+    assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
+    await suivant(page);
+    // 2) Mauvaise réponse : faux.
+    await page.locator('.choix-qcm__btn').first().waitFor();
+    const c2 = await question(page);
+    const textes = await page.locator('.choix-qcm__texte').allTextContents();
+    const leurre = textes.find(t => t !== refText(c2));
+    await page.locator('.choix-qcm__btn', { hasText: leurre }).first().click();
+    assert.equal(await mot(page), 'Faux');
+    await terminerSeance(page);
+    await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
+    const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
+    assert.deepEqual(lignes.map(l => [l.carte, l.verdict, l.correcteur, l.mode]), [[c1.id, 'partiel', 'qcm', 'qcm'], [c2.id, 'faux', 'qcm', 'qcm']]);
+    assert.equal(lignes[0].reponse, refText(c1));
+    assert.equal(o.requetesGemini.length, 0);
+    // Retour : 2 QCM de faits sur 20.
+    await clic(page, 'Retour');
+    await page.getByText('(encore 18)', { exact: false }).waitFor();
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
+
 test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui dit quoi faire', async () => {
   const o = await ouvrir(navigateur, serveur.base, { fichiers: { ...lireDonnees(), 'rappel/progres/srs/ess-couleurs.json': '{ abîmé' } });
   const { page, faux } = o;

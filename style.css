@@ -332,6 +332,21 @@ select.champ-texte { appearance: auto; }
 .page--seance { gap: 12px; }
 .etiquette-carte { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
 .etiquette-carte__paquet { color: var(--muted); }
+.etiquette-carte__mode { margin-left: auto; font-family: var(--f-mono); font-size: 0.8rem; color: var(--vein); border: 1.5px solid var(--vein); border-radius: 6px; padding: 1px 6px; }
+.choix-qcm { display: grid; gap: 10px; }
+.choix-qcm__btn {
+  appearance: none; display: flex; gap: 12px; align-items: flex-start; text-align: left; cursor: pointer; width: 100%;
+  min-height: 56px; padding: 12px 14px; border: 1.5px solid var(--rule); border-radius: var(--rayon); background: var(--surface);
+  color: inherit; font: inherit;
+}
+.choix-qcm__btn:hover { border-color: var(--vein); }
+.choix-qcm__btn:active { background: var(--vein-pale); }
+.choix-qcm__btn:focus-visible { outline: 3px solid var(--vein); outline-offset: 2px; }
+.choix-qcm__lettre {
+  flex: none; width: 32px; height: 32px; border-radius: 7px; border: 2px solid var(--muted);
+  display: grid; place-items: center; font-family: var(--f-mono); font-weight: 500;
+}
+.choix-qcm__texte { padding-top: 3px; overflow-wrap: anywhere; }
 .puce { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; }
 .puce .icone { width: 14px; height: 14px; stroke-width: 2.4; }
 .puce--revision { color: var(--vein); background: var(--vein-pale); }

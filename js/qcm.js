@@ -6,6 +6,7 @@ const BAREME = [1, 0.5, 0.2, 0];
 const QCM_PAR_SEANCE = 8;
 
 const lettre = l => String(l ?? '').trim().toUpperCase();
+const LETTRES = 'ABCDEFGHIJ';
 
 function melanger(liste, rnd) {
   const a = liste.slice();
@@ -14,6 +15,13 @@ function melanger(liste, rnd) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+// Propositions dans un ordre tiré à chaque série (demande du 26 oct. 2026 : ne pas retenir « c'est A et C »).
+// Les lettres suivent l'ordre affiché ; `origine` garde la lettre du fichier (journal, explications).
+export function melangerPropositions(qcm, rnd = Math.random) {
+  const props = melanger((qcm.propositions || []).filter(Boolean), rnd);
+  return { ...qcm, propositions: props.map((p, i) => ({ ...p, l: LETTRES[i], origine: p.origine ?? p.l })) };
 }
 
 // Une discordance = une proposition cochée à tort ou oubliée.
@@ -99,14 +107,19 @@ export function choisirQcm(donnees, maintenant, { n, cours = null, choix = 'tout
   anciens.sort((a, b) => a.ts - b.ts);
   const liste = choix === 'reussis' ? anciens.filter(x => x.fini).map(x => x.q)
     : [...melanger(dus, rnd), ...melanger(jamais, rnd), ...(choix === 'a-faire' ? [] : anciens.map(x => x.q))];
-  return melanger(liste.slice(0, Math.max(0, nb)), rnd);
+  return melanger(liste.slice(0, Math.max(0, nb)), rnd).map(q => melangerPropositions(q, rnd));
 }
 
+// Lettres du fichier dans le journal (cochées), et l'ordre affiché quand il a été mélangé.
 export function ligneQcm({ qcm, cochees, resultat, duree, maintenant, appareil = 'inconnu' }) {
+  const props = qcm.propositions || [];
+  const origine = new Map(props.map(p => [lettre(p.l), lettre(p.origine ?? p.l)]));
+  const ordre = props.map(p => lettre(p.origine ?? p.l)).join('');
   const ligne = {
     id: `${appareil}-${maintenant}`, ts: maintenant, t: isoParis(maintenant), appareil,
     qcm: qcm.id, cours: qcm.cours, ue: qcm.ue,
-    cochees: [...new Set((cochees || []).map(lettre))].sort(),
+    cochees: [...new Set((cochees || []).map(lettre).map(x => origine.get(x) ?? x))].sort(),
+    ordre: props.some(p => p.origine != null && lettre(p.origine) !== lettre(p.l)) ? ordre : undefined,
     points: resultat.points, discordances: resultat.discordances, duree,
   };
   for (const k of Object.keys(ligne)) if (ligne[k] === undefined) delete ligne[k];

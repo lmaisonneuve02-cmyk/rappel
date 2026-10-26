@@ -1,5 +1,6 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
-import { Seance, apportDuFiltre, revisionsEnAvance } from '../seance.js';
+import { Seance, apportDuFiltre, revisionsEnAvance, qcmRestants } from '../seance.js';
+import { propositionsCarte, resultatQcmCarte } from '../qcmcartes.js';
 import { corriger, contester } from '../correction.js';
 import { corrigerLocal, indice, plafonnerIndice } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
@@ -64,7 +65,11 @@ function ficheDe(donnees, carte, paquet) {
 export function creer(ctx, params = {}) {
   const micro = !!reconnaissanceDisponible(window);
   let donnees = ctx.donnees();
-  const seance = new Seance({ donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance });
+  const modeQcm = params.mode === 'qcm';
+  const seance = new Seance({
+    donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance,
+    mode: modeQcm ? 'qcm' : 'ecrit', max: modeQcm ? qcmRestants(donnees, ctx.maintenant()) : Infinity,
+  });
   const objectifAuDepart = ctx.atteint();
   let objectifAnnonce = objectifAuDepart;
   const geminiPrevenu = new Set();   // codes d'erreur de Gemini déjà signalés dans cette séance
@@ -186,6 +191,9 @@ export function creer(ctx, params = {}) {
 
   // --- Étape : une carte ---
   function afficherCarte(e) {
+    // Séance QCM : propositions tirées à chaque affichage ; sans leurre possible, la carte s'écrit.
+    e.qcm = modeQcm ? propositionsCarte(e.carte, e.paquet, donnees) : null;
+    if (e.qcm) { afficherCarteQcm(e); return; }
     etat = 'carte';
     const { carte, paquet, nouvelle, rang, total } = e;
     majHaut(rang, total);
@@ -246,6 +254,40 @@ export function creer(ctx, params = {}) {
     else contenu.querySelector('h1')?.focus({ preventScroll: true });
   }
 
+  // --- Étape : une carte en QCM (jour sans élan) ---
+  function afficherCarteQcm(e) {
+    etat = 'carte';
+    const { carte, paquet, nouvelle, rang, total } = e;
+    majHaut(rang, total);
+    debutCarte = ctx.maintenant();
+    arreterMicro();
+    const encore = ratees.has(paquet + '/' + carte.id);
+    const choisir = p => {
+      if (etat !== 'carte') return;
+      etat = 'correction';
+      actionEntree = null;
+      noter(e, resultatQcmCarte(p), p.texte, [], true);
+    };
+    const lettres = 'ABCDEFGH';
+    vider(contenu,
+      h('p', { class: 'etiquette-carte' },
+        h('span', { class: ['puce', nouvelle && !encore ? 'puce--nouvelle' : 'puce--revision'] }, icone(nouvelle && !encore ? 'etoile' : 'boucle'),
+          encore ? 'Encore une fois' : nouvelle ? 'Nouvelle' : 'Révision'),
+        h('span', { class: 'etiquette-carte__paquet', text: donnees.paquets[paquet]?.nom || paquet }),
+        h('span', { class: 'etiquette-carte__mode', text: 'QCM' })),
+      questionNoeud(carte),
+      h('p', { class: 'consigne', text: 'Choisis la bonne réponse.' }),
+      imageSvg(carte.svg),
+      h('div', { class: 'choix-qcm', role: 'group', 'aria-label': 'Propositions' }, e.qcm.map((p, i) =>
+        h('button', { type: 'button', class: 'choix-qcm__btn', onclick: () => choisir(p) },
+          h('span', { class: 'choix-qcm__lettre', 'aria-hidden': 'true', text: lettres[i] }),
+          h('span', { class: 'choix-qcm__texte', text: p.texte })))),
+      h('p', { class: 'aide', text: "Une bonne réponse compte « partiel ». L'ordre change à chaque fois." }));
+    vider(barre, h('div', { class: 'barre-action__rang barre-action__rang--carte' },
+      bouton('Je ne sais pas', { onClick: () => corrigerCarte(e, '', true) })));
+    contenu.querySelector('h1')?.focus({ preventScroll: true });
+  }
+
   // --- Correction ---
   async function corrigerCarte(e, texte, jeNeSaisPas = false) {
     if (etat !== 'carte') return;
@@ -297,7 +339,7 @@ export function creer(ctx, params = {}) {
     const avant = ctx.cartes();
     const note = seance.noter({
       verdict: resultat.verdict, correcteur: resultat.correcteur, reponse, duree: Math.max(0, t - debutCarte),
-      confiance: resultat.confiance, indice: !!e.indice, maintenant: t, appareil: ctx.appareil,
+      confiance: resultat.confiance, indice: !!e.indice, mode: e.qcm ? 'qcm' : 'ecrit', maintenant: t, appareil: ctx.appareil,
     });
     for (const op of [...opsCorrection, ...note.ops]) ctx.sync.ajouter(op);
     donnees = ctx.donnees();
@@ -347,7 +389,7 @@ export function creer(ctx, params = {}) {
     const fiche = ficheDe(donnees, carte, paquet);
     const cles = ctx.cles();
     const peutContester = !v.conteste && (r.verdict === 'partiel' || r.verdict === 'faux')
-      && !['je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne()
+      && !['je-ne-sais-pas', 'contestation', 'qcm'].includes(r.correcteur) && !v.e.qcm && !!cles.gemini && ctx.enLigne()
       && !(v.e.indice && r.verdict === 'partiel'); // après un indice, « partiel » est le plafond
 
     const bandeauVerdict = verdictNoeud(r, { lignes: [nsp ? `Pas grave. ${delai}` : delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });

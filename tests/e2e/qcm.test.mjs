@@ -30,6 +30,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
 
     await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 3 QCM' }).click();
     const faits = [];
+    let melanges = 0;
     for (let i = 1; i <= 3; i++) {
       await page.locator('.proposition').first().waitFor();
       assert.equal(await texte(page.locator('.seance-haut__position')), `QCM ${i} sur 3`);
@@ -38,10 +39,15 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
       assert.ok(q, `QCM inconnu : ${enonce}`);
       assert.equal(await page.locator('.proposition').count(), 5);
       const plan = PLAN[q.id];
-      for (const l of plan.cochees) await page.locator(`label.proposition[for="prop-${l}"]`).click();
+      // Propositions mélangées : on coche par le texte (lettres du fichier dans le plan).
+      const etiquette = l => page.locator('label.proposition', { hasText: q.propositions.find(p => p.l === l).t });
+      for (const l of plan.cochees) await etiquette(l).click();
       for (const l of ['A', 'B', 'C', 'D', 'E']) {
-        assert.equal(await page.locator(`#prop-${l}`).isChecked(), plan.cochees.includes(l), `case ${l} de ${q.id}`);
+        const id = await etiquette(l).getAttribute('for');
+        assert.equal(await page.locator(`#${id}`).isChecked(), plan.cochees.includes(l), `case ${l} de ${q.id}`);
       }
+      const affichees = (await page.locator('.proposition__texte').allTextContents()).map(t => t.replace(/^[A-E]\.\s*/, ''));
+      if (affichees.join('|') !== q.propositions.map(p => p.t).join('|')) melanges++;
       if (i === 1) await verifierEcran(page, 'qcm-question');
       await clic(page, 'Valider');
       await page.locator('.corr-prop').first().waitFor();
@@ -55,6 +61,7 @@ test('QCM : cocher, valider, points selon le barème, journal envoyé', async ()
       await clic(page, i < 3 ? 'Suivant' : 'Voir le bilan');
     }
     assert.deepEqual([...faits].sort(), Object.keys(PLAN));
+    assert.ok(melanges >= 1, 'propositions affichées dans un autre ordre que le fichier');
 
     await page.getByRole('heading', { name: 'Série terminée' }).waitFor();
     assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '1,5 / 3');

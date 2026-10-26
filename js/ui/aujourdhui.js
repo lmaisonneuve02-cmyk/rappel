@@ -1,5 +1,5 @@
 // Aujourd'hui : ta séance du jour (révisions puis nouvelles cartes), un seul grand bouton.
-import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour } from '../seance.js';
+import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour, qcmRestants, QCM_MAX } from '../seance.js';
 import { qcmProposables } from '../qcm.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
@@ -183,6 +183,13 @@ export function creer(ctx, params = {}) {
       } else {
         blocs.push(h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter tes réponses.'));
       }
+      // QCM des cartes (26 oct.) : pour les jours sans élan, QCM_MAX cartes au plus par jour dans l'objectif.
+      const resteQcm = qcmRestants(d, now);
+      blocs.push(h('div', { class: 'mains-libres-entree' },
+        resteQcm > 0 ? bouton(`QCM rapide (${Math.min(resteQcm, r.total)})`, { icone: 'qcm', classe: 'btn--large', onClick: () => ctx.aller('seance', { filtre, mode: 'qcm' }) }) : null,
+        h('p', { class: 'aide', text: resteQcm > 0
+          ? `Jour sans élan ? Choisis parmi 4 réponses. Compte « partiel », ${QCM_MAX} cartes au plus par jour (encore ${resteQcm}).`
+          : `QCM rapide : ${QCM_MAX} cartes aujourd'hui, c'est le plafond. La suite en écrivant.` })));
     }
     vider(page, blocs);
 

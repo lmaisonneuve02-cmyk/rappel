@@ -375,6 +375,7 @@ export const BADGES = {
   exact: 'Reconnu : réponse attendue',
   carnet: 'Reconnu (déjà accepté)',
   auto: 'Noté par toi',
+  qcm: 'QCM des cartes',
   contestation: 'Corrigé après un second avis',
   'je-ne-sais-pas': '',
 };

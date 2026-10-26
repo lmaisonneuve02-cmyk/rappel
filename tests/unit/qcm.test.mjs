@@ -1,7 +1,7 @@
 // QCM : barème par discordances, échéances 2 j / 7 j, QCM proposables, choix d'une série, journal.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scorer, etatQcm, qcmProposables, coursVus, choisirQcm, ligneQcm } from '../../js/qcm.js';
+import { scorer, etatQcm, qcmProposables, coursVus, choisirQcm, ligneQcm, melangerPropositions } from '../../js/qcm.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
 
 const z = s => Date.parse(s);
@@ -257,4 +257,35 @@ test('ligneQcm : ligne du journal au format prévu', () => {
   assert.equal('duree' in sansDuree, false);
   assert.deepEqual(sansDuree.cochees, []);
   assert.deepEqual(etatQcm('cv-cm06-q01', [l]).etape, 1);
+});
+
+// --- Ordre des propositions ---
+
+test('melangerPropositions : ordre tiré, lettres A à E dans l\'ordre affiché, vrai/faux et lettre d\'origine gardés', () => {
+  const q = qcm('q1', ['A', 'C']);
+  const ordres = new Set();
+  for (let g = 1; g <= 12; g++) {
+    const m = melangerPropositions(q, graine(g));
+    assert.deepEqual(m.propositions.map(p => p.l), ['A', 'B', 'C', 'D', 'E']);
+    for (const p of m.propositions) assert.equal(p.t, `Proposition ${p.origine}`);
+    assert.deepEqual(m.propositions.filter(p => p.vrai).map(p => p.origine).sort(), ['A', 'C']);
+    ordres.add(m.propositions.map(p => p.origine).join(''));
+  }
+  assert.ok(ordres.size >= 8, `ordres variés (${ordres.size})`);
+  assert.deepEqual(q.propositions.map(p => p.l), ['A', 'B', 'C', 'D', 'E'], 'QCM d\'origine intact');
+  // Remélanger un QCM déjà mélangé garde la lettre du fichier.
+  const deux = melangerPropositions(melangerPropositions(q, graine(3)), graine(4));
+  for (const p of deux.propositions) assert.equal(p.t, `Proposition ${p.origine}`);
+});
+
+test('choisirQcm mélange les propositions ; points et journal en lettres du fichier', () => {
+  const d = { paquets: { p1: { cartes: [] } }, qcm: { q1: qcm('q1', ['A', 'C']) }, srs: { p1: { x: {} } }, qcmJournal: [] };
+  const [m] = choisirQcm(d, T, { n: 1, cours: 'p1', rnd: graine(7) });
+  const vraies = m.propositions.filter(p => p.vrai).map(p => p.l);
+  const r = scorer(m, vraies);
+  assert.equal(r.points, 1);
+  const l = ligneQcm({ qcm: m, cochees: vraies, resultat: r, maintenant: T });
+  assert.deepEqual(l.cochees, ['A', 'C']);
+  assert.equal(l.ordre, m.propositions.map(p => p.origine).join(''));
+  assert.deepEqual(Object.keys(l), ['id', 'ts', 't', 'appareil', 'qcm', 'cours', 'ue', 'cochees', 'ordre', 'points', 'discordances']);
 });

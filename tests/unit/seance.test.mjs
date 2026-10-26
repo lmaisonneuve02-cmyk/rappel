@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
-  JOURS_TOTAL_SEUL, Seance,
+  JOURS_TOTAL_SEUL, Seance, QCM_MAX, qcmRestants,
 } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
@@ -127,12 +127,50 @@ test('cartesDuJour : cartes distinctes du jour, retour à +10 min compté une fo
       ligne('x2', z('2026-10-12T22:00:00Z')),                         // le lendemain
     ],
   });
-  assert.deepEqual(cartesDuJour(d, T), { cartes: 4, nouvelles: 1, revisions: 3 });
-  assert.deepEqual(cartesDuJour(donneesDe(), T), { cartes: 0, nouvelles: 0, revisions: 0 });
-  assert.deepEqual(cartesDuJour({}, T), { cartes: 0, nouvelles: 0, revisions: 0 });
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 4, nouvelles: 1, revisions: 3, qcm: 0, qcmComptees: 0 });
+  assert.deepEqual(cartesDuJour(donneesDe(), T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0 });
+  assert.deepEqual(cartesDuJour({}, T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0 });
   // même identifiant dans deux paquets : deux cartes
   const d2 = donneesDe({ reponses: [ligne('a', T), ligne('a', T + MIN, { paquet: 'p2' })] });
   assert.equal(cartesDuJour(d2, T).cartes, 2);
+});
+
+test('cartesDuJour : QCM des cartes comptés au plus 20 par jour, révisions d\'abord', () => {
+  const qcm = (id, i, extra = {}) => ligne(id, T + i * 1000, { mode: 'qcm', verdict: 'partiel', note: 2, correcteur: 'qcm', ...extra });
+  const rev = { nouvelle: false };
+  const d = donneesDe({ reponses: [
+    ...Array.from({ length: 25 }, (_, i) => qcm(`r${i}`, i, rev)),         // 25 révisions en QCM
+    ...Array.from({ length: 5 }, (_, i) => qcm(`n${i}`, 30 + i)),           // 5 nouvelles en QCM
+    ...['e1', 'e2', 'e3'].map((id, i) => ligne(id, T + (40 + i) * 1000, rev)),   // 3 révisions écrites
+    qcm('m1', 50, rev), ligne('m1', T + 51000, rev),                        // QCM puis écrite : compte comme écrite
+  ] });
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 24, nouvelles: 0, revisions: 24, qcm: 30, qcmComptees: 20 });
+  assert.equal(qcmRestants(d, T), 0);
+  // Peu de révisions en QCM : les nouvelles complètent jusqu'à 20.
+  const d2 = donneesDe({ reponses: [
+    ...Array.from({ length: 3 }, (_, i) => qcm(`r${i}`, i, rev)),
+    ...Array.from({ length: 30 }, (_, i) => qcm(`n${i}`, 10 + i)),
+  ] });
+  assert.deepEqual(cartesDuJour(d2, T), { cartes: 20, nouvelles: 17, revisions: 3, qcm: 33, qcmComptees: 20 });
+  // L'objectif ne s'atteint pas avec des QCM seulement.
+  const p = paquet('p1', Array.from({ length: 40 }, (_, i) => carte(`n${i}`)));
+  const d3 = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 100 }, reponses: Array.from({ length: 35 }, (_, i) => qcm(`n${i}`, i)) });
+  const o = objectifDuJour(d3, T, 30);
+  assert.deepEqual([o.cartes, o.atteint, o.encore], [20, false, 10]);
+  assert.equal(qcmRestants(donneesDe(), T), QCM_MAX);
+  assert.equal(qcmRestants(d2, T), 0);
+});
+
+test('Seance en mode QCM : au plus `max` cartes, lignes marquées mode « qcm »', () => {
+  const p = paquet('p1', Array.from({ length: 8 }, (_, i) => carte(`c${i}`)));
+  const d = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 20 } });
+  const s = new Seance({ donnees: d, maintenant: T, mode: 'qcm', max: 3, rnd: graine(1) });
+  assert.equal(s.restantes(), 3);
+  const r = s.noter({ verdict: 'partiel', correcteur: 'qcm', reponse: 'Réponse c0.', maintenant: T + 1000, appareil: 'pc' });
+  assert.equal(r.ligne.mode, 'qcm');
+  const e = new Seance({ donnees: d, maintenant: T, rnd: graine(1) });
+  assert.equal(e.restantes(), 8);
+  assert.equal('mode' in e.noter({ verdict: 'juste', correcteur: 'local', maintenant: T + 1000 }).ligne, false);
 });
 
 test('aReviser : cartes disponibles (dû dès minuit, +10 min après une erreur), filtre', () => {
@@ -793,5 +831,5 @@ test('Seance : une carte ratée revient dans la séance et ne compte qu\'une foi
   }
   assert.deepEqual(vus, ['a', 'b', 'a']);
   assert.equal(s.etape().type, 'fin');
-  assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1 });
+  assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1, qcm: 0, qcmComptees: 0 });
 });

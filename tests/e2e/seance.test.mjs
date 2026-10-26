@@ -328,6 +328,14 @@ test('toujours répondre : pas d\'auto-évaluation, « Indice » plafonné à «
     await page.locator('.bloc-liste--comprendre .commentaire', { hasText: c.commentaire }).waitFor();
     await page.locator('.bloc-liste--comprendre .mnemo', { hasText: c.mnemo }).waitFor();
     await verifierEcran(page, 'commentaire');
+    // « Explique-moi » : Gemini répond, avec la question posée.
+    await clic(page, 'Explique-moi');
+    await page.fill('#question-gemini', 'Pourquoi six ?');
+    await page.locator('#question-gemini').press('Enter');   // Entrée ne passe pas à la carte suivante
+    assert.equal(await page.locator('#question-gemini').count(), 1);
+    await clic(page, 'Demander');
+    await page.locator('.explication-gemini .commentaire', { hasText: 'six triangles équilatéraux' }).waitFor();
+    await page.getByText('« Pourquoi six ? »').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     await suivant(page);
     // Carte suivante : l'indice est oublié, une réponse juste reste juste.
@@ -340,7 +348,7 @@ test('toujours répondre : pas d\'auto-évaluation, « Indice » plafonné à «
     await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
     const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
     assert.deepEqual(lignes.map(l => [l.carte, l.verdict, l.indice]), [[c.id, 'partiel', true], [c2.id, 'juste', undefined]]);
-    assert.equal(o.requetesGemini.length, 0);
+    assert.equal(o.requetesGemini.length, 1, 'seulement l\'explication demandée');
     o.verifierConsole();
   } finally {
     await o.fermer();

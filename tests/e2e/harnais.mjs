@@ -95,6 +95,7 @@ export function genreRequete(corps) {
   if (props.lettres) return 'reponse-qcm';
   if (props.qcm) return 'generation-qcm';
   if (props.verdict) return 'correction';
+  if (props.explication) return 'explication';
   return 'verification';
 }
 
@@ -107,6 +108,9 @@ export function geminiSimule({ verdicts = {} } = {}) {
     if (genre === 'contestation') {
       return enveloppe({ analyse: 'Même sens que la réponse attendue.', etudiant_a_raison: true, verdict: 'juste',
         explication: 'Ta formulation dit la même chose.', formulation: '' });
+    }
+    if (genre === 'explication') {
+      return enveloppe({ explication: 'Un hexagone se découpe en six triangles équilatéraux autour de son centre.', mnemo: '' });
     }
     if (genre === 'correction') {
       const reponse = reponseDe(corps);

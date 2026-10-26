@@ -1,7 +1,8 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
 import { Seance, apportDuFiltre, revisionsEnAvance, qcmRestants } from '../seance.js';
 import { propositionsCarte, resultatQcmCarte } from '../qcmcartes.js';
-import { corriger, contester } from '../correction.js';
+import { corriger, contester, opErreur } from '../correction.js';
+import { expliquerGemini } from '../gemini.js';
 import { corrigerLocal, indice, plafonnerIndice } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
 import { clozeParts, refText } from '../texte.js';
@@ -419,11 +420,14 @@ export function creer(ctx, params = {}) {
       corps = [attendue, manque, erreurs, nsp ? null : explication, taReponse];
     }
 
+    const zoneExplication = h('div', { class: 'explication-gemini', 'aria-live': 'polite' });
+    const lienExplique = cles.gemini && ctx.enLigne() ? h('button', { type: 'button', class: 'lien', text: 'Explique-moi',
+      onclick: () => ouvrirExplication(v, zoneExplication, lienExplique) }) : null;
     const zoneContestation = h('div', { class: 'contestation' });
     const lienConteste = peutContester ? h('button', { type: 'button', class: 'lien', text: 'Je conteste',
       onclick: () => ouvrirContestation(v, zoneContestation, lienConteste) }) : null;
     const badge = BADGES[r.correcteur] || '';
-    const pied = (badge || lienConteste) ? h('div', { class: 'pied-verdict' }, badge ? h('span', { class: 'badge', text: badge }) : null, lienConteste) : null;
+    const pied = (badge || lienConteste || lienExplique) ? h('div', { class: 'pied-verdict' }, badge ? h('span', { class: 'badge', text: badge }) : null, lienExplique, lienConteste) : null;
 
     const notes = [];
     // Gemini indisponible : un seul message bref (le badge du verdict dit déjà qui a corrigé).
@@ -448,6 +452,7 @@ export function creer(ctx, params = {}) {
       pourComprendre(carte),
       fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
       pied,
+      zoneExplication,
       zoneContestation);
 
     const affiche = Date.now();
@@ -459,6 +464,40 @@ export function creer(ctx, params = {}) {
     annoncer(`${mot}. ${delai} ${ligneEffet}`);
     if (estTactile()) bandeauVerdict.focus({ preventScroll: true });
     else btnSuivant.focus({ preventScroll: true });
+  }
+
+  // « Explique-moi » : explication de Gemini sur demande, avec une question facultative.
+  function ouvrirExplication(v, zone, lien) {
+    lien.hidden = true;
+    const question = h('textarea', { id: 'question-gemini', class: 'reponse', rows: '2', placeholder: 'Une question précise ? (facultatif)', autocomplete: 'off', spellcheck: 'false' });
+    const statut = h('p', { class: 'statut-micro', 'aria-live': 'polite' });
+    const demander = bouton('Demander', { onClick: () => envoyer() });
+    vider(zone, h('div', { class: 'bloc-liste' }, h('h3', { class: 'petit-titre', text: 'Explique-moi' }), question, statut, demander));
+    question.focus({ preventScroll: true });
+    async function envoyer() {
+      demander.disabled = true;
+      question.readOnly = true;
+      statut.className = 'statut-micro';
+      statut.textContent = 'Gemini réfléchit…';
+      const g = ctx.gemini();
+      try {
+        const r = await expliquerGemini(v.e.carte, { reponse: v.reponse, verdict: v.resultat.verdict, question: question.value.trim() },
+          { cle: g.cle, fetch: g.fetch, modele: ctx.donnees().reglages?.modeles?.contestation || undefined });
+        if (!zone.isConnected) return;
+        vider(zone, h('section', { class: 'bloc-liste bloc-liste--comprendre' },
+          h('h3', { class: 'petit-titre', text: 'Explication de Gemini' }),
+          question.value.trim() ? h('p', { class: 'aide', text: `« ${question.value.trim()} »` }) : null,
+          h('p', { class: 'commentaire', text: r.explication }),
+          r.mnemo ? h('p', { class: 'mnemo', text: r.mnemo }) : null));
+      } catch (err) {
+        if (err?.name === 'ErreurGemini') ctx.sync.ajouter(opErreur(err, { contexte: 'explication', maintenant: ctx.maintenant(), appareil: ctx.appareil }));
+        if (!zone.isConnected) return;
+        statut.className = 'statut-micro statut-micro--erreur';
+        statut.textContent = err?.name === 'ErreurGemini' ? err.message : "Pas d'explication possible maintenant. Réessaie plus tard.";
+        demander.disabled = false;
+        question.readOnly = false;
+      }
+    }
   }
 
   function ouvrirContestation(v, zone, lien) {
@@ -620,7 +659,7 @@ export function creer(ctx, params = {}) {
     const cible = ev.target;
     if (ev.key === 'Escape' && etat !== 'fin') { ev.preventDefault(); terminer.armer(); return; }
     if (ev.key !== 'Enter') return;
-    if (cible.id === 'raison') return;
+    if (cible.id === 'raison' || cible.id === 'question-gemini') return;
     if (cible.id === 'reponse') {
       if (ev.shiftKey && !(ev.ctrlKey || ev.metaKey)) return;   // Maj+Entrée : à la ligne
       ev.preventDefault();

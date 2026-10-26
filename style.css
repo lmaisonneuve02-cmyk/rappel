@@ -235,11 +235,6 @@ html.plein .onglets, html.saisie .onglets, html.sans-entete .onglets { display: 
 .btn--calme { width: 100%; border-color: var(--muted); }
 .btn.arme { background: var(--faux); border-color: var(--faux); color: var(--surface); text-decoration: none; }
 .btn--attente::before { content: ""; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: tourne 0.8s linear infinite; }
-.btn--note { flex-direction: column; gap: 4px; min-height: 64px; padding: 8px; }
-.btn--note .icone { width: 24px; height: 24px; stroke-width: 2.6; }
-.btn--note-juste .icone { color: var(--juste); }
-.btn--note-partiel .icone { color: var(--partiel); }
-.btn--note-faux .icone { color: var(--faux); }
 .btn--lien-externe { width: 100%; color: var(--vein); border-color: var(--vein); }
 .btn--lien-externe .icone { width: 18px; height: 18px; }
 .lien {
@@ -366,6 +361,11 @@ select.champ-texte { appearance: auto; }
 .statut-micro:empty { min-height: 0; }
 .statut-micro--actif { color: var(--art); font-weight: 700; }
 .statut-micro--erreur { color: var(--faux); }
+.indice { display: grid; gap: 2px; }
+.indice:empty { display: none; }
+.lien--indice { justify-self: start; }
+.indice__titre { font-weight: 700; }
+.indice__mots { font-family: var(--f-mono); letter-spacing: 0.04em; overflow-wrap: anywhere; }
 .schema-bouton { appearance: none; display: block; padding: 8px; margin: 0; border: 1px solid var(--rule); border-radius: var(--rayon); background: #ffffff; cursor: zoom-in; max-width: 100%; }
 .schema { display: block; max-width: 100%; max-height: 38vh; margin: 0 auto; }
 .schema-bouton.agrandi { cursor: zoom-out; }
@@ -405,7 +405,6 @@ select.champ-texte { appearance: auto; }
 .issue--ok { border-color: var(--juste); background: var(--juste-pale); }
 .issue--ok .icone { color: var(--juste); }
 .lien--fiche { justify-self: start; }
-.question-auto { font-family: var(--f-display); font-weight: 600; font-size: 1.45rem; margin-top: 4px; }
 .contestation { display: grid; gap: 8px; }
 .contestation:empty { display: none; }
 .feuille-fiche { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--rayon); padding: 4px 16px 16px; }

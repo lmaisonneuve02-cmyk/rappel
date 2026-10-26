@@ -125,7 +125,7 @@ export const DEPOT_DEFAUT = {proprietaire: 'lmaisonneuve02-cmyk', depot: 'etudes
 export const MODELES_DEFAUT = {correction: 'gemini-3.5-flash-lite', contestation: 'gemini-3.8-flash'};
 export const CLES = {jeton: 'rappel.jeton', gemini: 'rappel.gemini', depot: 'rappel.depot', appareil: 'rappel.appareil', voixNom: 'rappel.voixNom', theme: 'rappel.theme'};
 export const OBJECTIF_DEFAUT = 60;
-export const VERSION = '2.0.3';
+export const VERSION = '2.0.4';
 ```
 
 ### `js/temps.js`
@@ -390,7 +390,7 @@ L'appli reste utilisable sans jeton en mode démonstration ? Non : sans jeton, r
 ### Séance (`ui/seance.js`)
 - Haut : barre de progression fine, « Carte 3 sur 64 », bouton « Terminer » (deux appuis pour confirmer).
 - Étape fiche : titre « Avant les nouvelles cartes : la micro-fiche », fiche, bouton « J'ai lu, on y va ».
-- Carte : étiquette (« Révision » / « Nouvelle »), nom du paquet, question en grand (serif), consigne courte selon le type (« Une réponse précise. », « Complète les blancs, dans l'ordre. », « Explique le mécanisme. »), champ de réponse large, **bouton micro** rond dans le champ (texte affiché en direct ; état « J'écoute… » visible ; arrêt au bouton ou après le silence), bouton principal « Corriger » (Ctrl+Entrée), boutons secondaires « Je ne sais pas » et « Voir la réponse » (champ vide : montre la réponse et trois boutons « Je l'avais » / « En partie » / « Non » → correcteur `auto`).
+- Carte : étiquette (« Révision » / « Nouvelle »), nom du paquet, question en grand (serif), consigne courte selon le type (« Une réponse précise. », « Complète les blancs, dans l'ordre. », « Explique le mécanisme. »), champ de réponse large, **bouton micro** rond dans le champ (texte affiché en direct ; état « J'écoute… » visible ; arrêt au bouton ou après le silence), bouton principal « Corriger » (Ctrl+Entrée), bouton secondaire « Je ne sais pas » et lien « Indice » (première idée en initiales ; réponse plafonnée à « partiel »). Pas d'auto-évaluation : toujours répondre avant de voir la correction (26 oct. 2026).
 - Pendant la correction : « Correction… » (indicateur), pas plus de 15 s.
 - Verdict : bandeau coloré avec icône (Juste / Partiel / Faux), « revient dans 4 jours », listes « Ce que tu as dit de juste », « Ce qui manquait », « Erreur » ; explication ; « Réponse attendue » ; lien « Voir la fiche : <titre> » ; badge du correcteur (« Corrigé par Gemini », « Corrigé sur l'appareil », « Corrigé hors ligne », « Reconnu (déjà accepté) ») ; **bouton principal « Suivant »** (Entrée) ; lien discret « Je conteste » en bas → zone « Dis pourquoi (facultatif) » + micro + « Envoyer » → second avis → message « Tu avais raison : verdict corrigé » ou l'explication.
 - Pause à 30 cartes faites (comme v1) ; objectif du jour atteint : message de réussite une fois. Chaque verdict dit son effet (« +1 carte : 18/60 », « Déjà comptée aujourd'hui : 18/60 »).

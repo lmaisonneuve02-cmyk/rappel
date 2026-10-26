@@ -329,7 +329,7 @@ test('noter : état relu au moment de noter, ligne au format du journal, opérat
   assert.deepStrictEqual(JSON.parse(JSON.stringify(r.ligne)), r.ligne);
 
   // nouvelle carte, partiel, sans durée ni confiance
-  const r2 = s.noter({ verdict: 'partiel', correcteur: 'auto', maintenant: t + MIN, appareil: 'pc' });
+  const r2 = s.noter({ verdict: 'partiel', correcteur: 'local', indice: true, maintenant: t + MIN, appareil: 'pc' });
   assert.equal(r2.etatAvant, null);
   assert.deepStrictEqual(r2.etatApres, review(null, 2, t + MIN));
   assert.equal(r2.ligne.nouvelle, true);
@@ -337,6 +337,7 @@ test('noter : état relu au moment de noter, ligne au format du journal, opérat
   assert.equal(r2.ligne.reponse, '');
   assert.equal('duree' in r2.ligne, false);
   assert.equal('confiance' in r2.ligne, false);
+  assert.equal(r2.ligne.indice, true, 'réponse donnée après un indice');
   assert.equal(s.etape().type, 'fin');
   assert.throws(() => s.noter({ verdict: 'juste', maintenant: t + 2 * MIN, appareil: 'pc' }), /terminée/);
 });

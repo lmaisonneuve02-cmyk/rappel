@@ -1,7 +1,7 @@
 // Correction sur l'appareil : cartes synthétiques (aucune carte réelle).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ideesDe, correspondanceDirecte, corrigerLocal, verifierBareme } from '../../js/correcteur.js';
+import { ideesDe, correspondanceDirecte, corrigerLocal, verifierBareme, indice, plafonnerIndice } from '../../js/correcteur.js';
 import { refText, creerIdf, lev } from '../../js/texte.js';
 
 const C = {
@@ -340,4 +340,23 @@ test('phrase faite seulement de mots vides : cherchée telle quelle', async () =
     ], pieges: [] } };
   assert.equal(corrigerLocal(carte, carte.a).verdict, 'juste');
   assert.equal(corrigerLocal(carte, 'siège seulement').verdict, 'partiel');
+});
+
+test('indice : première idée obligatoire en initiales, mots courts visibles', () => {
+  assert.equal(indice(C.vg), 'v_________ g_____');
+  assert.equal(indice(C.angor), 'i___________ e____ a______ et b______ en o______ du m_______');
+  assert.equal(indice(C.souffle), 's_________', 'texte à trous : le premier trou');
+  assert.equal(indice(C.seuil), '1__ m___', 'sans barème : idées déduites de la réponse');
+  assert.equal(indice(C.choc), 'À g_____');
+  assert.equal(indice({ id: 'vide', type: 'fait', q: 'Question ?', a: '' }), '');
+  assert.equal(indice(null), '');
+});
+
+test('plafond après un indice : juste devient partiel, le reste ne bouge pas', () => {
+  const juste = corr('vg', 'ventricule gauche');
+  const p = plafonnerIndice(juste);
+  assert.equal(p.verdict, 'partiel');
+  assert.match(p.explication, /indice/);
+  assert.equal(juste.verdict, 'juste', 'résultat d\'origine intact');
+  for (const r of [corr('vg', 'ventricule'), corr('vg', 'oreillette droite')]) assert.equal(plafonnerIndice(r), r);
 });

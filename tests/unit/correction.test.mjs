@@ -183,6 +183,16 @@ describe('contester', () => {
     await assert.rejects(contester(base({ gemini: { cle: CLE, fetch: pasDeReseau }, enLigne: false })), message);
   });
 
+  test('après un indice : acceptée « juste », mais notée « partiel »', async () => {
+    const f = fauxFetch(avis(true, 'juste', 'le frein vagal ralentit le cœur'));
+    const r = await contester(base({ gemini: { cle: CLE, fetch: f }, indice: true }));
+    assert.equal(r.accepte, true);
+    assert.equal(r.resultat.verdict, 'partiel');
+    assert.deepEqual(r.etatApres, review(etatAvant, noteDe('partiel'), T));
+    const ligne = r.ops.find(o => o.type === 'reponse').ligne;
+    assert.deepEqual([ligne.verdict, ligne.note, ligne.indice], ['partiel', noteDe('partiel'), true]);
+  });
+
   test('acceptée : état recalculé, ligne de contestation, carnet, cas « accepte »', async () => {
     const f = fauxFetch(avis(true, 'juste', 'le frein vagal ralentit le cœur'));
     const r = await contester(base({ gemini: { cle: CLE, fetch: f }, donnees: donneesDe({ modeles: { contestation: 'gemini-3.8-pro' } }) }));

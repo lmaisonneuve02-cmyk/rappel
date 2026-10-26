@@ -2,7 +2,7 @@
 // Renvoie le résultat et les opérations de synchro à ajouter (carnet, a-revoir, srs, reponse).
 // Module pur : fetch et horloge sont injectés.
 import { estJeNeSaisPas, normaliser } from './texte.js';
-import { ideesDe, correspondanceDirecte, corrigerLocal } from './correcteur.js';
+import { ideesDe, correspondanceDirecte, corrigerLocal, plafonnerIndice } from './correcteur.js';
 import { corrigerGemini, contesterGemini, ErreurGemini } from './gemini.js';
 import { MODELES_DEFAUT } from './config.js';
 import { review, noteDe } from './fsrs.js';
@@ -79,10 +79,11 @@ export async function corriger({ carte, paquet, reponse, donnees, gemini = {}, e
 
 // Second avis de Gemini. Acceptée : nouvel état de la carte, ligne « contestation » qui remplace
 // la ligne contestée, formulation au carnet. Dans tous les cas : un cas « à revoir ».
+// Après un indice, le nouveau verdict reste plafonné à « partiel ».
 // Les erreurs de Gemini (ErreurGemini, message prêt à afficher) remontent à l'appelant.
 export async function contester({
   carte, paquet, reponse, resultat, raison = '', etatAvant = null, donnees, gemini = {}, enLigne = true,
-  maintenant, appareil = 'inconnu', ligneId,
+  maintenant, appareil = 'inconnu', ligneId, indice = false,
 }) {
   const { cle, fetch } = gemini || {};
   if (!cle || !enLigne) throw new Error('La contestation demande une connexion et la clé Gemini.');
@@ -99,19 +100,20 @@ export async function contester({
     return { resultat: { ...resultat, explication: avis.explication || resultat?.explication }, accepte: false, avis, ops: [cas('refuse')] };
   }
 
-  const note = noteDe(avis.verdict);
+  const verdict = indice ? plafonnerIndice({ verdict: avis.verdict }).verdict : avis.verdict;
+  const note = noteDe(verdict);
   const etatApres = review(etatAvant, note, t);
   const ligne = sansVide({
     id: `${appareil}-${t}`, ts: t, t: isoParis(t), appareil, paquet, carte: carte.id, reponse: texte,
-    verdict: avis.verdict, correcteur: 'contestation', note, nouvelle: !etatAvant, remplace: ligneId,
+    verdict, correcteur: 'contestation', note, nouvelle: !etatAvant, remplace: ligneId, indice: indice || undefined,
   });
   const ops = [{ type: 'srs', paquet, carte: carte.id, etat: etatApres }, { type: 'reponse', ligne }];
   if (avis.formulation) ops.push({ type: 'carnet', carte: carte.id, acceptee: avis.formulation });
   ops.push(cas('accepte'));
 
-  const juste = avis.verdict === 'juste';
+  const juste = verdict === 'juste';
   const nouveau = {
-    ...resultat, verdict: avis.verdict, explication: avis.explication, correcteur: 'contestation',
+    ...resultat, verdict, explication: avis.explication, correcteur: 'contestation',
     ...(juste ? { idees_manquantes: [], erreurs: [] } : {}),
   };
   return { resultat: nouveau, accepte: true, avis, etatApres, ops };

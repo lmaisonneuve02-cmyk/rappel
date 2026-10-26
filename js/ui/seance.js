@@ -1,13 +1,13 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
 import { Seance, apportDuFiltre, revisionsEnAvance } from '../seance.js';
 import { corriger, contester } from '../correction.js';
-import { corrigerLocal } from '../correcteur.js';
+import { corrigerLocal, indice, plafonnerIndice } from '../correcteur.js';
 import { delaiTexte } from '../fsrs.js';
 import { clozeParts, refText } from '../texte.js';
 import { choisirQcm } from '../qcm.js';
 import { Ecoute, reconnaissanceDisponible, messageEcoute } from '../voix.js';
 import {
-  h, vider, bouton, libeller, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
+  h, vider, bouton, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
   verdictNoeud, VERDICTS, BADGES, imageSvg, nb, estTactile, aideVue, compterAide, empiler, depiler, bandeau, texteEncore, texteAtteint,
 } from './commun.js';
 
@@ -70,7 +70,6 @@ export function creer(ctx, params = {}) {
   const geminiPrevenu = new Set();   // codes d'erreur de Gemini déjà signalés dans cette séance
   let etat = 'debut';
   let actionEntree = null;    // ce que fait la touche Entrée dans l'état courant
-  let touches = null;         // raccourcis 1/2/3 de l'auto-évaluation
   let debutCarte = 0;
   let ecoute = null;
   let clavierOuvert = false;
@@ -107,7 +106,6 @@ export function creer(ctx, params = {}) {
   function suivant() {
     arreterMicro();
     actionEntree = null;
-    touches = null;
     donnees = ctx.donnees();
     seance.majDonnees(donnees);
     const e = seance.etape();
@@ -200,10 +198,23 @@ export function creer(ctx, params = {}) {
       autocomplete: 'off', autocapitalize: 'sentences', spellcheck: 'false', enterkeyhint: 'send',
     });
     const statut = h('p', { class: 'statut-micro', 'aria-live': 'polite' });
-    const principal = bouton('Voir la réponse', { principal: true, onClick: () => (champ.value.trim() ? corrigerCarte(e, champ.value) : voirReponse(e)) });
+    // Toujours répondre avant de voir la correction : champ vide, « Corriger » le rappelle.
+    const demanderReponse = () => { statut.textContent = 'Écris ta réponse, ou touche « Je ne sais pas ».'; statut.className = 'statut-micro'; };
+    const principal = bouton('Corriger', { principal: true, onClick: () => (champ.value.trim() ? corrigerCarte(e, champ.value) : demanderReponse()) });
     const nsp = bouton('Je ne sais pas', { onClick: () => corrigerCarte(e, '', true) });
+    // Indice : début de la première idée ; la réponse vaudra au mieux « partiel ».
+    e.indice = false;
+    const texteIndice = indice(carte);
+    const zoneIndice = h('div', { class: 'indice', 'aria-live': 'polite' });
+    if (texteIndice) {
+      vider(zoneIndice, h('button', { type: 'button', class: 'lien lien--indice', onclick: () => {
+        e.indice = true;
+        vider(zoneIndice, h('p', { class: 'indice__texte' }, h('span', { class: 'indice__titre', text: 'Indice : ' }), h('span', { class: 'indice__mots', text: texteIndice })),
+          h('p', { class: 'aide', text: "Avec l'indice, une réponse juste compte « partiel »." }));
+        champ.focus({ preventScroll: true });
+      } }, 'Indice'));
+    }
     champ.addEventListener('input', () => {
-      libeller(principal, champ.value.trim() ? 'Corriger' : 'Voir la réponse');
       if (!ecoute?.active && statut.textContent && !statut.classList.contains('statut-micro--erreur')) statut.textContent = '';
     });
     const btnMicro = brancherMicro(champ, statut, () => principal.focus({ preventScroll: true }));
@@ -220,14 +231,15 @@ export function creer(ctx, params = {}) {
       imageSvg(carte.svg),
       h('div', { class: ['champ-reponse', btnMicro && 'champ-reponse--micro'] }, champ, btnMicro),
       statut,
-      montrerAide ? h('p', { class: 'aide', text: 'Quelques mots suffisent, même incomplet. Réponse dans ta tête ? Champ vide, touche « Voir la réponse » et note-toi.' }) : null,
+      zoneIndice,
+      montrerAide ? h('p', { class: 'aide', text: 'Quelques mots suffisent, même incomplet. Tu bloques ? « Indice ». Tu découvres la carte ? « Je ne sais pas ».' }) : null,
       !micro && montrerAide ? h('p', { class: 'aide aide--ligne' }, icone('micro'), 'Astuce : le micro de ton clavier permet de dicter.') : null,
       h('p', { class: 'aide aide--pc', text: 'Entrée : corriger · Maj+Entrée : à la ligne' }));
     vider(barre, h('div', { class: 'barre-action__rang barre-action__rang--carte' }, nsp, principal));
 
     actionEntree = () => {
       if (champ.value.trim()) corrigerCarte(e, champ.value);
-      else { statut.textContent = 'Écris ta réponse, ou touche « Voir la réponse ».'; statut.className = 'statut-micro'; }
+      else demanderReponse();
     };
     // Sur PC le champ prend le focus ; sur téléphone, seulement si le clavier était ouvert (pas sur la 1re carte).
     if (!estTactile() || clavierOuvert) champ.focus({ preventScroll: true });
@@ -274,7 +286,7 @@ export function creer(ctx, params = {}) {
     correctionEnCours = false;
     // « Terminer » (ou un autre écran) pendant la correction : la réponse compte, sans réafficher le verdict.
     const visible = etat === 'correction' && !quitte;
-    noter(e, res.resultat, reponse, res.ops || [], visible);
+    noter(e, e.indice ? plafonnerIndice(res.resultat) : res.resultat, reponse, res.ops || [], visible);
     if (etat === 'fin') rendreFin();
     else if (quitte) ctx.sync.pousser('fin-seance').catch(() => {});
   }
@@ -285,7 +297,7 @@ export function creer(ctx, params = {}) {
     const avant = ctx.cartes();
     const note = seance.noter({
       verdict: resultat.verdict, correcteur: resultat.correcteur, reponse, duree: Math.max(0, t - debutCarte),
-      confiance: resultat.confiance, maintenant: t, appareil: ctx.appareil,
+      confiance: resultat.confiance, indice: !!e.indice, maintenant: t, appareil: ctx.appareil,
     });
     for (const op of [...opsCorrection, ...note.ops]) ctx.sync.ajouter(op);
     donnees = ctx.donnees();
@@ -335,7 +347,8 @@ export function creer(ctx, params = {}) {
     const fiche = ficheDe(donnees, carte, paquet);
     const cles = ctx.cles();
     const peutContester = !v.conteste && (r.verdict === 'partiel' || r.verdict === 'faux')
-      && !['auto', 'je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne();
+      && !['je-ne-sais-pas', 'contestation'].includes(r.correcteur) && !!cles.gemini && ctx.enLigne()
+      && !(v.e.indice && r.verdict === 'partiel'); // après un indice, « partiel » est le plafond
 
     const bandeauVerdict = verdictNoeud(r, { lignes: [nsp ? `Pas grave. ${delai}` : delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });
     const attendue = h('section', { class: 'bloc-liste' }, h('h3', { class: 'petit-titre', text: 'Réponse attendue' }), reponseAttendue(carte));
@@ -422,7 +435,7 @@ export function creer(ctx, params = {}) {
         const c = await contester({
           carte: v.e.carte, paquet: v.e.paquet, reponse: v.reponse, resultat: v.resultat, raison: raison.value.trim(),
           etatAvant: v.note.etatAvant, donnees: ctx.donnees(), gemini: ctx.gemini(), enLigne: ctx.enLigne(),
-          maintenant: ctx.maintenant(), appareil: ctx.appareil, ligneId: v.note.ligne.id,
+          maintenant: ctx.maintenant(), appareil: ctx.appareil, ligneId: v.note.ligne.id, indice: !!v.e.indice,
         });
         for (const op of c.ops || []) ctx.sync.ajouter(op);
         donnees = ctx.donnees();
@@ -460,36 +473,6 @@ export function creer(ctx, params = {}) {
     }
   }
 
-  // --- « Voir la réponse » : il se note lui-même ---
-  function voirReponse(e) {
-    etat = 'auto';
-    arreterMicro();
-    const { carte, paquet } = e;
-    const fiche = ficheDe(donnees, carte, paquet);
-    vider(contenu,
-      questionNoeud(carte, { petite: true }),
-      h('section', { class: 'bloc-liste bloc-liste--attendue' }, h('h2', { class: 'petit-titre', text: 'Réponse attendue', tabindex: '-1' }), reponseAttendue(carte)),
-      fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
-      h('p', { class: 'question-auto', text: "Tu l'avais ?" }),
-      h('p', { class: 'aide', text: 'Ta note règle quand la carte reviendra.' }),
-      h('p', { class: 'aide aide--pc', text: 'Touches 1, 2, 3' }));
-    const choisir = verdict => {
-      if (etat !== 'auto') return;
-      etat = 'note';
-      const resultat = { verdict, idees_trouvees: [], idees_manquantes: [], erreurs: [], confiance: 1, explication: '', correcteur: 'auto' };
-      const v = noter(e, resultat, '', [], false);
-      const msg = `Noté : ${VERDICTS[verdict].mot.toLowerCase()} · ${quandRevient(v, ctx.maintenant())}. ${effet(v)}`;
-      toast(msg, { duree: 2500 });
-      annoncer(msg);
-      suivant();
-    };
-    const choix = [['faux', 'Non', '1'], ['partiel', 'En partie', '2'], ['juste', "Je l'avais", '3']];
-    vider(barre, h('div', { class: 'barre-action__rang barre-action__rang--trois' },
-      choix.map(([verdict, libelle]) => bouton(libelle, { icone: VERDICTS[verdict].icone, classe: `btn--note btn--note-${verdict}`, onClick: () => choisir(verdict) }))));
-    touches = k => { const c = choix.find(x => x[2] === k); if (c) choisir(c[0]); };
-    contenu.querySelector('h2').focus({ preventScroll: true });
-  }
-
   // --- Fin ---
   const ligneSynchro = h('p', { class: 'etat-envoi', 'aria-live': 'polite' });
   function majLigneSynchro() {
@@ -504,7 +487,6 @@ export function creer(ctx, params = {}) {
     verdictAffiche = null;
     arreterMicro();
     actionEntree = null;
-    touches = null;
     majHaut();
     rendreFin();
   }
@@ -583,7 +565,6 @@ export function creer(ctx, params = {}) {
     if (ev.isComposing || ev.repeat) return;
     const cible = ev.target;
     if (ev.key === 'Escape' && etat !== 'fin') { ev.preventDefault(); terminer.armer(); return; }
-    if (touches && /^[123]$/.test(ev.key) && !cible.matches?.('textarea, input')) { ev.preventDefault(); touches(ev.key); return; }
     if (ev.key !== 'Enter') return;
     if (cible.id === 'raison') return;
     if (cible.id === 'reponse') {

@@ -174,7 +174,7 @@ export function creer(ctx) {
       h('ul', { class: 'liste-etapes' },
         h('li', null, icone('boucle'), h('span', { text: "Chaque jour : tes révisions d'abord, puis tes nouvelles cartes." })),
         h('li', null, icone('fiche'), h('span', { text: 'Avant de nouvelles cartes, tu lis leur micro-fiche (1 min).' })),
-        h('li', null, icone('micro'), h('span', { text: 'Tu réponds en écrivant ou en dictant. Réponse dans ta tête ? « Voir la réponse », et tu te notes.' })),
+        h('li', null, icone('micro'), h('span', { text: 'Tu réponds toujours, en écrivant ou en dictant, avant de voir la correction. Tu bloques ? « Indice ». Tu découvres la carte ? « Je ne sais pas ».' })),
         h('li', null, icone('juste'), h('span', { text: 'Je corrige : Juste, Partiel ou Faux. Pas d\'accord ? « Je conteste ».' })),
         h('li', null, icone('soleil'), h('span', { text: `Objectif : ${ctx.objectif()} cartes par jour : tes révisions d'abord, puis des nouvelles pour compléter.` }))),
       sansCle ? h('p', { class: 'aide', text: 'Sans clé Gemini, la correction se fait sur ton appareil. Tu pourras ajouter la clé dans Réglages.' }) : null);

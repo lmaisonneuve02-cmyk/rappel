@@ -239,6 +239,22 @@ export function corrigerLocal(carte, reponse, { idf, abreviations } = {}) {
   return resultat(verdict, trouvees, manquantes, uniques, CONFIANCE_LOCALE, explication, 'local');
 }
 
+// Indice : la première idée obligatoire, chaque mot réduit à sa première lettre suivie d'un
+// tiret par lettre cachée (« amortir l'onde » → « a______ l'o___ »). Les mots d'une ou deux
+// lettres restent visibles. Après un indice, la réponse vaut au mieux « partiel ».
+export function indice(carte) {
+  const idees = ideesDe(carte);
+  const idee = idees.find(i => i.obligatoire) || idees[0];
+  if (!idee) return '';
+  return idee.texte.replace(/[\p{L}\p{N}]+/gu, m => (m.length <= 2 ? m : m[0] + '_'.repeat(m.length - 1)));
+}
+
+// Plafond après un indice : « juste » devient « partiel ».
+export function plafonnerIndice(resultat) {
+  if (resultat?.verdict !== 'juste') return resultat;
+  return { ...resultat, verdict: 'partiel', explication: "Juste, mais avec l'indice : compté partiel." };
+}
+
 // Contrôle d'un barème : messages en français, liste vide si tout va bien (ou sans barème).
 export function verifierBareme(carte) {
   const m = [];

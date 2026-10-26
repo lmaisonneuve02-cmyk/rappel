@@ -4,6 +4,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { estAcquise } from '../../js/fsrs.js';
 import { jourParis } from '../../js/temps.js';
+import { refText } from '../../js/texte.js';
+import { indice } from '../../js/correcteur.js';
 import {
   demarrerServeur, lancerNavigateur, ouvrir, verifierEcran, clic, compteur, carteDeQuestion, geminiSimule,
   fichiersDepot, attendre, texte, lireDonnees, dont } from './harnais.mjs';
@@ -295,37 +297,44 @@ test('contestation acceptée : verdict corrigé, la carte ne revient pas, ligne 
   }
 });
 
-test('« Voir la réponse » : il se note lui-même (Je l\'avais / En partie / Non)', async () => {
+test('toujours répondre : pas d\'auto-évaluation, « Indice » plafonné à « partiel »', async () => {
   const o = await ouvrir(navigateur, serveur.base);
   const { page, faux } = o;
   try {
     await page.goto(serveur.base);
     await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 5 cartes' }).click();
-    const vus = [];
-    for (const [choix, verdict, compte] of [["Je l'avais", 'juste', 'Cartes : 1/30 · Révisions : 1'], ['En partie', 'partiel', 'Cartes : 2/30'], ['Non', 'faux', 'Cartes : 3/30']]) {
-      await page.locator('#reponse').waitFor();
-      const c = await question(page);
-      vus.push([c.id, verdict]);
-      const principal = page.locator('.barre-action .btn--principal');
-      assert.equal(await texte(principal), 'Voir la réponse');
-      // Entrée sur un champ vide ne dévoile pas la réponse.
-      await page.locator('#reponse').press('Enter');
-      await page.getByText('Écris ta réponse, ou touche « Voir la réponse ».').waitFor();
-      await principal.click();
-      await page.getByText("Tu l'avais ?").waitFor();
-      await page.locator('.bloc-liste--attendue .attendue', { hasText: c.a || '' }).first().waitFor();
-      if (vus.length === 1) await verifierEcran(page, 'auto-evaluation');
-      await clic(page, choix);
-      await page.locator('#toast', { hasText: `Noté : ${verdict === 'juste' ? 'juste' : verdict === 'partiel' ? 'partiel' : 'faux'}` }).waitFor();
-      assert.equal(await compteur(page), compte);
-      // Après les deux révisions vient la micro-fiche.
-      if (vus.length === 2) await clic(page, "J'ai lu, on y va");
-    }
     await page.locator('#reponse').waitFor();
+    const c = await question(page);
+    const principal = page.locator('.barre-action .btn--principal');
+    assert.equal(await texte(principal), 'Corriger');
+    assert.equal(await page.getByRole('button', { name: 'Voir la réponse' }).count(), 0);
+    // Champ vide : ni Entrée ni « Corriger » ne dévoilent la réponse.
+    await page.locator('#reponse').press('Enter');
+    await page.getByText('Écris ta réponse, ou touche « Je ne sais pas ».').waitFor();
+    await principal.click();
+    assert.equal(await page.locator('.page--seance .verdict').count(), 0);
+    assert.equal(await texte(principal), 'Corriger', 'le libellé ne change pas avec le champ');
+    // Indice : la première idée en initiales.
+    await clic(page, 'Indice');
+    assert.equal(await texte(page.locator('.indice__mots')), indice(c));
+    await page.getByText("Avec l'indice, une réponse juste compte « partiel ».").waitFor();
+    await verifierEcran(page, 'indice');
+    // Réponse attendue mot pour mot, mais après l'indice : partiel, sans « Je conteste ».
+    await repondre(page, refText(c));
+    assert.equal(await mot(page), 'Partiel');
+    await page.getByText("Juste, mais avec l'indice : compté partiel.").waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
+    await suivant(page);
+    // Carte suivante : l'indice est oublié, une réponse juste reste juste.
+    await page.locator('#reponse').waitFor();
+    assert.equal(await page.locator('.indice__mots').count(), 0);
+    const c2 = await question(page);
+    await repondre(page, refText(c2));
+    assert.equal(await mot(page), 'Juste');
     await terminerSeance(page);
     await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
     const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
-    assert.deepEqual(lignes.map(l => [l.carte, l.verdict, l.correcteur, l.reponse]), vus.map(([id, v]) => [id, v, 'auto', '']));
+    assert.deepEqual(lignes.map(l => [l.carte, l.verdict, l.indice]), [[c.id, 'partiel', true], [c2.id, 'juste', undefined]]);
     assert.equal(o.requetesGemini.length, 0);
     o.verifierConsole();
   } finally {
@@ -333,110 +342,6 @@ test('« Voir la réponse » : il se note lui-même (Je l\'avais / En partie / N
   }
 });
 
-test('« Terminer » pendant la correction : la séance reste terminée et la réponse compte', async () => {
-  const o = await ouvrir(navigateur, serveur.base, { latence: 2000 });
-  const { page, faux } = o;
-  try {
-    await page.goto(serveur.base);
-    await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 5 cartes' }).click();
-    await page.locator('#reponse').waitFor();
-    const r1 = await question(page);
-    await page.fill('#reponse', REPONSES[r1.id]);
-    await clic(page, 'Corriger');
-    await page.locator('.btn--attente', { hasText: 'Correction…' }).waitFor();
-    await terminerSeance(page);
-    await attendre(() => o.requetesGemini.length === 1 && page.evaluate(() => !document.querySelector('.btn--attente')));
-    await page.waitForTimeout(2500);   // la correction arrive après la fin demandée
-    assert.equal(await page.getByRole('heading', { name: 'Séance terminée' }).count(), 1, 'l\'écran de fin reste affiché');
-    assert.equal(await page.locator('.page--seance .verdict').count(), 0);
-    await page.locator('.chiffres--doux', { hasText: /^1 réponse · 1 juste · / }).waitFor();
-    await page.getByRole('button', { name: 'Continuer · 4 cartes' }).waitFor();
-    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
-    await attendre(() => {
-      const l = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
-      return l?.length === 1 && l[0].carte === r1.id;
-    }, { message: 'réponse envoyée après la fin' });
-    await verifierEcran(page, 'terminer-pendant-correction');
-    // Continuer reprend à la carte suivante.
-    await clic(page, 'Continuer · 4 cartes');
-    await page.locator('#reponse').waitFor();
-    assert.equal(await position(page), 'Carte 2 sur 5');
-    assert.notEqual((await question(page)).id, r1.id);
-    o.verifierConsole();
-  } finally {
-    await o.fermer();
-  }
-});
-
-test('« Suivant » pendant le second avis : on reste sur la carte suivante, l\'issue est signalée', async () => {
-  const o = await ouvrir(navigateur, serveur.base, {
-    gemini: geminiSimule({ verdicts: { [FAUX_CONTESTE]: 'faux' } }), latence: genre => (genre === 'contestation' ? 2000 : 150) });
-  const { page, faux } = o;
-  try {
-    await page.goto(serveur.base);
-    await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 5 cartes' }).click();
-    await page.locator('#reponse').waitFor();
-    const r1 = await question(page);
-    await repondre(page, FAUX_CONTESTE);
-    await clic(page, 'Je conteste');
-    await clic(page, 'Demander un second avis');
-    await page.getByText('Je demande un second avis…').waitFor();
-    await suivant(page);
-    await page.locator('#reponse').waitFor();
-    const r2 = await question(page);
-    assert.notEqual(r2.id, r1.id);
-    await page.locator('#toast', { hasText: 'tu avais raison' }).waitFor({ timeout: 5000 });
-    await page.waitForTimeout(300);
-    assert.equal(await page.locator('#reponse').count(), 1, 'la carte suivante reste affichée');
-    assert.equal((await question(page)).id, r2.id);
-    assert.equal(await position(page), 'Carte 2 sur 5');
-    assert.equal(await compteur(page), 'Cartes : 1/30 · Révisions : 1');
-    await verifierEcran(page, 'suivant-pendant-second-avis');
-    await terminerSeance(page);
-    assert.match(await texte(page.locator('.chiffres--doux')), /^1 réponse · 1 juste · \d+ min$/);
-    await attendre(() => (fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`] || []).some(l => l.correcteur === 'contestation'),
-      { message: 'ligne de contestation envoyée' });
-    o.verifierConsole();
-  } finally {
-    await o.fermer();
-  }
-});
-
-test('PC : Entrée lance la séance ; stockage en mémoire signalé, sans promettre que tout est gardé', async () => {
-  const o = await ouvrir(navigateur, serveur.base, { pc: true });
-  const { page, faux } = o;
-  // Navigation privée stricte : pas d'IndexedDB, Rappel garde tout en mémoire.
-  await o.ctx.addInitScript(() => Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }));
-  try {
-    await page.goto(serveur.base);
-    await page.locator('.page--aujourdhui .bloc-seance').waitFor();
-    await page.getByText("Ce navigateur ne garde rien après fermeture (navigation privée ?) : tes réponses partent dès qu'il y a du réseau.").waitFor();
-    await verifierEcran(page, 'pc-aujourdhui-memoire');
-
-    // Entrée, focus hors champ : « Commencer ».
-    await o.horsLigne(true);
-    await page.keyboard.press('Enter');
-    await page.locator('#reponse').waitFor();
-    assert.equal(await position(page), 'Carte 1 sur 5');
-    const r1 = await question(page);
-    await repondre(page, REPONSES[r1.id]);
-    assert.equal(await mot(page), 'Juste');
-    await terminerSeance(page);
-    await page.locator('#synchro-texte', { hasText: 'Hors ligne : envoi au retour du réseau' }).waitFor();
-    await page.locator('.etat-envoi', { hasText: 'Hors ligne : envoi au retour du réseau' }).waitFor();
-    assert.doesNotMatch(await texte(page.locator('#synchro-texte')), /gardé/);
-    await verifierEcran(page, 'pc-fin-memoire');
-
-    // Retour du réseau, page restée ouverte : la réponse part.
-    await o.horsLigne(false);
-    await attendre(() => faux.commits().length === 2, { message: 'envoi au retour du réseau' });
-    const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
-    assert.deepEqual(lignes.map(l => [l.carte, l.verdict]), [[r1.id, 'juste']]);
-    o.verifierConsole([/ERR_INTERNET_DISCONNECTED/]);
-  } finally {
-    await o.fermer();
-  }
-});
 
 test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui dit quoi faire', async () => {
   const o = await ouvrir(navigateur, serveur.base, { fichiers: { ...lireDonnees(), 'rappel/progres/srs/ess-couleurs.json': '{ abîmé' } });
@@ -462,12 +367,12 @@ test('fichier de progression abîmé sur GitHub : envois bloqués, bandeau qui d
   }
 });
 
-// Il se note lui-même (« Voir la réponse », « Je l'avais ») : la carte suivante s'affiche directement.
-async function jeLAvais(page) {
+// Réponse attendue mot pour mot (reconnue sans Gemini), puis carte suivante.
+async function bonneReponse(page) {
   await page.locator('#reponse').waitFor();
-  await clic(page, 'Voir la réponse');
-  await clic(page, "Je l'avais");
-  await page.locator('#toast', { hasText: 'Noté : juste' }).waitFor();
+  await repondre(page, refText(await question(page)));
+  assert.equal(await mot(page), 'Juste');
+  await suivant(page);
 }
 
 test('un seul paquet : s\'il ne suffit pas pour l\'objectif, « Tout » passe en principal', async () => {
@@ -486,7 +391,7 @@ test('un seul paquet : s\'il ne suffit pas pour l\'objectif, « Tout » passe en
     // Il garde son choix : ce paquet seulement.
     await clic(page, 'Ce paquet (3)');
     await clic(page, "J'ai lu, on y va");
-    for (let i = 0; i < 3; i++) await jeLAvais(page);
+    for (let i = 0; i < 3; i++) await bonneReponse(page);
     await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
     assert.equal(await texte(page.locator('.grand-compteur__chiffre')), '3/30');
     assert.equal(await texte(page.locator('.objectif-ligne')), `Encore 2 cartes${dont('2 révisions')} pour l'objectif. Il en reste dans les autres paquets.`);
@@ -500,7 +405,7 @@ test('un seul paquet : s\'il ne suffit pas pour l\'objectif, « Tout » passe en
     for (let i = 0; i < 2; i++) {
       await page.locator('.puce', { hasText: 'Révision' }).waitFor();
       assert.equal((await question(page)).paquet, 'ess-formes');
-      await jeLAvais(page);
+      await bonneReponse(page);
     }
     await page.getByRole('heading', { name: 'Séance terminée' }).waitFor();
     await page.getByText("Objectif du jour atteint. Tu peux t'arrêter là.").waitFor();

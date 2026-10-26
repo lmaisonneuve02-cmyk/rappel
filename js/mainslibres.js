@@ -597,7 +597,8 @@ export class MainsLibres extends EventTarget {
         carte, paquet, reponse: ctx.reponse, resultat: ctx.resultat, raison, etatAvant: ctx.note?.etatAvant ?? null,
         ligneId: ctx.note?.ligne?.id, maintenant: this.maintenant(), appareil: this.appareil,
       });
-    } catch {
+    } catch (e) {
+      if (e?.ops?.length) await Promise.resolve().then(() => enregistrer(e.ops)).catch(() => {});
       c = null;
     }
     ctx.conteste = true;

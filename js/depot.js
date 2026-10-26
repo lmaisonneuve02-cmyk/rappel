@@ -140,6 +140,7 @@ function cible(op) {
     case 'srs': return idSur(op.paquet) ? `progres/srs/${op.paquet}.json` : null;
     case 'reponse': return Number.isFinite(op.ligne?.ts) ? `progres/reponses/${moisParis(op.ligne.ts)}.jsonl` : null;
     case 'qcm-reponse': return Number.isFinite(op.ligne?.ts) ? `progres/qcm/${moisParis(op.ligne.ts)}.jsonl` : null;
+    case 'erreur': return Number.isFinite(op.ligne?.ts) ? `progres/erreurs/${moisParis(op.ligne.ts)}.jsonl` : null;
     case 'carnet': return 'progres/carnet.json';
     case 'a-revoir': return 'progres/a-revoir.json';
     case 'reglages': return 'progres/reglages.json';
@@ -211,6 +212,7 @@ export function appliquerOp(objets, op, racine = 'rappel/') {
       break;
     case 'reponse':
     case 'qcm-reponse':
+    case 'erreur':
       objets[path] = fusionLignes(actuel ?? [], [op.ligne]);
       break;
     case 'carnet':

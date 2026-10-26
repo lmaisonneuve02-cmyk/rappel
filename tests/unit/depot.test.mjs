@@ -109,6 +109,7 @@ test('cheminsTouches : un fichier par opération', () => {
   // 31 oct. 23 h 30 UTC = 1er nov. à Paris
   assert.deepEqual(cheminsTouches({ type: 'reponse', ligne: { ts: Date.UTC(2026, 9, 31, 23, 30) } }, R), ['rappel/progres/reponses/2026-11.jsonl']);
   assert.deepEqual(cheminsTouches({ type: 'qcm-reponse', ligne }, R), ['rappel/progres/qcm/2026-10.jsonl']);
+  assert.deepEqual(cheminsTouches({ type: 'erreur', ligne }, R), ['rappel/progres/erreurs/2026-10.jsonl']);
   assert.deepEqual(cheminsTouches({ type: 'carnet', carte: 'x' }, R), ['rappel/progres/carnet.json']);
   assert.deepEqual(cheminsTouches({ type: 'a-revoir', cas: {} }, R), ['rappel/progres/a-revoir.json']);
   assert.deepEqual(cheminsTouches({ type: 'reglages', reglages: {} }, R), ['rappel/progres/reglages.json']);

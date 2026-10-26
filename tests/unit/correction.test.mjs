@@ -158,7 +158,10 @@ describe('corriger : avec Gemini', () => {
     assert.equal(resultat.erreurGemini.code, 'quota');
     assert.equal(typeof resultat.erreurGemini.message, 'string');
     assert.ok(resultat.erreurGemini.message.length > 0);
-    assert.deepEqual(ops, []);
+    // Erreur consignée pour le diagnostic (progres/erreurs/AAAA-MM.jsonl).
+    assert.equal(ops.length, 1);
+    assert.deepEqual([ops[0].type, ops[0].ligne.contexte, ops[0].ligne.code, ops[0].ligne.status, ops[0].ligne.detail], ['erreur', 'correction', 'quota', 429, 'Quota exceeded']);
+    assert.ok(!JSON.stringify(ops).includes(CLE), 'jamais la clé');
     const reseau = fauxFetch(new TypeError('Failed to fetch'));
     const r2 = await corriger(args('nerf vague', { gemini: { cle: CLE, fetch: reseau } }));
     assert.deepEqual([r2.resultat.correcteur, r2.resultat.verdict, r2.resultat.erreurGemini.code], ['hors-ligne', 'juste', 'reseau']);

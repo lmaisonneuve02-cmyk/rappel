@@ -584,6 +584,63 @@ async function appeler(requete, { cle, modele, fetch: f, delai, pause = PAUSE_RE
   }
 }
 
+// ---------- Modèle de secours ----------
+// Google retire régulièrement des modèles (404) et le quota gratuit est compté par modèle (429) :
+// dans ces cas, on liste les modèles de la clé et on essaie les plus récents de la même famille
+// (flash-lite pour la correction, flash sinon). Le remplaçant trouvé sert pour le reste de la session.
+
+const URL_MODELES = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';
+const remplacants = new Map();   // modèle en échec → modèle qui a marché
+let listeModeles = null;         // promesse mémorisée (une liste par clé)
+
+export function oublierModeles() { remplacants.clear(); listeModeles = null; }
+
+const remplacable = e => e instanceof ErreurGemini
+  && (e.status === 404 || e.code === 'quota' || (e.status === 400 && /model/i.test(e.detail || '')));
+
+export async function listerModeles({ cle, fetch: f } = {}) {
+  const envoyer = f || ((url, options) => globalThis.fetch(url, options));
+  const rep = await envoyer(URL_MODELES, { headers: { 'x-goog-api-key': String(cle || '').trim() } });
+  if (!rep.ok) return [];
+  const donnees = JSON.parse(await rep.text());
+  return (donnees.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => String(m.name || '').replace(/^models\//, ''))
+    .filter(Boolean);
+}
+
+// Candidats d'une famille, du meilleur au moins bon : stables avant préversions, version la plus haute d'abord.
+export function classerModeles(noms, usage) {
+  const lite = usage === 'correction';
+  const version = n => Number((/^gemini-(\d+(?:\.\d+)?)/.exec(n) || [])[1] || 0);
+  const famille = n => /^gemini-\d/.test(n) && /flash/.test(n) && lite === /flash-lite/.test(n)
+    && !/image|tts|audio|live|embedding|thinking|computer|robotics/.test(n);
+  const instable = n => /preview|exp|latest/.test(n);
+  return [...new Set(noms)].filter(famille)
+    .sort((a, b) => instable(a) - instable(b) || version(b) - version(a) || a.localeCompare(b));
+}
+
+async function appelerAvecSecours(requete, opts, usage) {
+  const premier = remplacants.get(opts.modele) || opts.modele;
+  try {
+    return { brut: await appeler(requete, { ...opts, modele: premier }), modele: premier };
+  } catch (e) {
+    if (!remplacable(e)) throw e;
+    if (!listeModeles) listeModeles = listerModeles(opts).catch(() => []);
+    const candidats = classerModeles(await listeModeles, usage).filter(m => m !== premier && m !== opts.modele).slice(0, 3);
+    for (const m of candidats) {
+      try {
+        const brut = await appeler(requete, { ...opts, modele: m });
+        remplacants.set(opts.modele, m);
+        return { brut, modele: m };
+      } catch (e2) {
+        if (!remplacable(e2)) throw e2;
+      }
+    }
+    throw e;
+  }
+}
+
 const estObjet = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 function borne(v) {
@@ -618,7 +675,7 @@ function abreviationsApprises(brutes, reponse, connues) {
 
 export async function corrigerGemini(carte, reponse, ctx = {}, { cle, modele, fetch, delai = 15000, pause } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.correction);
-  const brut = await appeler(requeteCorrection(carte, reponse, ctx), { cle, modele: nom, fetch, delai, pause, niveau: 'minimal' });
+  const { brut } = await appelerAvecSecours(requeteCorrection(carte, reponse, ctx), { cle, modele: nom, fetch, delai, pause, niveau: 'minimal' }, 'correction');
   if (!estObjet(brut)) throw new ErreurGemini('format');
   const valide = VERDICTS.includes(brut.verdict);
   const verdict = valide ? brut.verdict : 'partiel';
@@ -642,7 +699,7 @@ export async function corrigerGemini(carte, reponse, ctx = {}, { cle, modele, fe
 export async function contesterGemini(carte, reponse, resultatInitial, raison, ctx = {}, { cle, modele, fetch, delai = 30000, pause } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
   const requete = requeteContestation(carte, reponse, resultatInitial, raison, ctx);
-  const brut = await appeler(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' });
+  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
   if (!estObjet(brut)) throw new ErreurGemini('format');
   const avant = VERDICTS.includes(resultatInitial?.verdict) ? resultatInitial.verdict : 'faux';
   const propose = VERDICTS.includes(brut.verdict) ? brut.verdict : avant;
@@ -663,7 +720,7 @@ export async function genererQcm({ cours, ue, cartes = [], fiche = null, n = 5 }
   const nombre = Math.min(10, Math.max(1, Math.round(n) || 5));
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
   const requete = requeteGenerationQcm({ cours, ue, cartes, fiche, n: nombre });
-  const brut = await appeler(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' });
+  const { brut } = await appelerAvecSecours(requete, { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
   if (!estObjet(brut) || !Array.isArray(brut.qcm)) throw new ErreurGemini('format');
   const ids = new Set(cartes.map(c => c.id));
   const base = `${cours}-g${Number(maintenant).toString(36)}`;
@@ -686,7 +743,7 @@ export async function genererQcm({ cours, ue, cartes = [], fiche = null, n = 5 }
 
 export async function repondreQcm(qcm, { cle, modele, fetch, delai = 30000, pause } = {}) {
   const nom = nomModele(modele, MODELES_DEFAUT.contestation);
-  const brut = await appeler(requeteReponseQcm(qcm), { cle, modele: nom, fetch, delai, pause, niveau: 'low' });
+  const { brut } = await appelerAvecSecours(requeteReponseQcm(qcm), { cle, modele: nom, fetch, delai, pause, niveau: 'low' }, 'contestation');
   if (!estObjet(brut) || !Array.isArray(brut.lettres)) throw new ErreurGemini('format');
   const lettres = brut.lettres.map(l => String(l).trim().toUpperCase()).filter(l => LETTRES.includes(l));
   return [...new Set(lettres)].sort();

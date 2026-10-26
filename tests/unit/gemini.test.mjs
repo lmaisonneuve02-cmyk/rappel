@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   SCHEMA_CORRECTION, SCHEMA_CONTESTATION, SCHEMA_QCM, SCHEMA_REPONSE_QCM, ErreurGemini,
   requeteCorrection, requeteContestation, requeteGenerationQcm, requeteReponseQcm, reglagesModele, lireReponse,
-  corrigerGemini, contesterGemini, genererQcm, repondreQcm, verifierCle,
+  corrigerGemini, contesterGemini, genererQcm, repondreQcm, verifierCle, classerModeles, oublierModeles,
 } from '../../js/gemini.js';
 
 const CLE = 'AQ.cle-de-test-123';
@@ -542,5 +542,62 @@ describe('vérification de la clé', () => {
   test('modèle introuvable → format', async () => {
     const f = fauxFetch(erreur(404, 'NOT_FOUND', 'not found'));
     await assert.rejects(verifierCle({ cle: CLE, fetch: f, modele: 'gemini-9' }), e => e.code === 'format' && e.message.includes('gemini-9'));
+  });
+});
+
+describe('modèle de secours', () => {
+  const NOMS = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash-lite-preview', 'gemini-3.8-flash', 'gemini-3.9-flash-preview',
+    'gemini-3.5-flash-image', 'gemini-3.5-flash-preview-tts', 'gemini-3.8-pro', 'text-embedding-004', 'gemini-3.5-flash-live'];
+
+  test('classerModeles : même famille, stables d\'abord, version la plus haute d\'abord', () => {
+    assert.deepEqual(classerModeles(NOMS, 'correction'), ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.6-flash-lite-preview']);
+    assert.deepEqual(classerModeles(NOMS, 'contestation'), ['gemini-3.8-flash', 'gemini-3.9-flash-preview']);
+    assert.deepEqual(classerModeles([], 'correction'), []);
+  });
+
+  // Faux Google : liste des modèles, 404 pour le modèle retiré, réponse pour les autres.
+  function routeur(retires, { quota = [] } = {}) {
+    const appels = [];
+    const f = async (url, options = {}) => {
+      appels.push(url);
+      if (url.includes('/models?')) {
+        return new Response(JSON.stringify({ models: NOMS.map(n => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) }), { status: 200 });
+      }
+      const modele = decodeURIComponent(url.slice(BASE.length).split(':')[0]);
+      if (retires.includes(modele)) return new Response(JSON.stringify({ error: { code: 404, message: `models/${modele} is not found`, status: 'NOT_FOUND' } }), { status: 404 });
+      if (quota.includes(modele)) return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded', status: 'RESOURCE_EXHAUSTED' } }), { status: 429 });
+      const r = succes(correctionJuste);
+      return new Response(JSON.stringify(r.corps), { status: 200 });
+    };
+    f.appels = appels;
+    return f;
+  }
+
+  test('modèle retiré (404) : bascule sur le meilleur de la famille, gardé ensuite', async () => {
+    oublierModeles();
+    const f = routeur(['gemini-9.9-flash-lite']);
+    const r = await corrigerGemini(carteFait, 'le parasympathique', {}, { ...opts(f), modele: 'gemini-9.9-flash-lite' });
+    assert.equal(r.verdict, 'juste');
+    assert.deepEqual(f.appels.map(u => (u.includes('/models?') ? 'liste' : u.replace(BASE, '').split(':')[0])), ['gemini-9.9-flash-lite', 'liste', 'gemini-3.5-flash-lite']);
+    // Ensuite : directement le remplaçant, sans nouvelle liste.
+    const g = routeur(['gemini-9.9-flash-lite']);
+    await corrigerGemini(carteFait, 'le parasympathique', {}, { ...opts(g), modele: 'gemini-9.9-flash-lite' });
+    assert.equal(g.appels.length, 1);
+    assert.ok(g.appels[0].includes('gemini-3.5-flash-lite'));
+    oublierModeles();
+  });
+
+  test('quota épuisé sur un modèle : un autre de la famille ; clé refusée : pas de secours', async () => {
+    oublierModeles();
+    const f = routeur([], { quota: ['gemini-3.8-flash'] });
+    const avis = { etudiant_a_raison: false, verdict: 'faux', explication: 'Non.', formulation: '', analyse: 'x' };
+    const g = async (url, o) => (url.includes(':generateContent') && !url.includes('3.8-flash') ? new Response(JSON.stringify(succes(avis).corps), { status: 200 }) : f(url, o));
+    const r = await contesterGemini(carteFait, 'x', { verdict: 'faux' }, '', {}, { cle: CLE, fetch: g, pause: 5, modele: 'gemini-3.8-flash' });
+    assert.equal(r.etudiant_a_raison, false);
+    oublierModeles();
+    const refus = fauxFetch(erreur(403, 'PERMISSION_DENIED', 'API key not valid'));
+    await assert.rejects(corrigerGemini(carteFait, 'x', {}, opts(refus)), e => e.code === 'cle');
+    assert.equal(refus.appels.length, 1);
+    oublierModeles();
   });
 });

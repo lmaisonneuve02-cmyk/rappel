@@ -515,6 +515,7 @@ export function creer(ctx, params = {}) {
           }
         }
       } catch (err) {
+        for (const op of err?.ops || []) ctx.sync.ajouter(op);
         const message = err?.name === 'ErreurGemini' ? `${err.message}${/Réessaie/.test(err.message) ? '' : ' Réessaie plus tard.'}` : 'Pas de second avis possible maintenant. Réessaie plus tard.';
         if (!(etat === 'verdict' && verdictAffiche === v) || quitte) { toast(`Second avis : ${message}`, { duree: 5000 }); return; }
         statut.className = 'statut-micro statut-micro--erreur';

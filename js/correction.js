@@ -34,6 +34,16 @@ function jeNeSaisPas(carte) {
   };
 }
 
+// Erreur de Gemini consignée dans progres/erreurs/AAAA-MM.jsonl (diagnostic par Claude ; jamais la clé).
+export function opErreur(e, { contexte, modele, maintenant, appareil = 'inconnu' }) {
+  const t = instant(maintenant);
+  return { type: 'erreur', ligne: sansVide({
+    id: `${appareil}-${t}-${contexte}`, ts: t, t: isoParis(t), appareil, contexte, modele,
+    code: e?.code || 'inconnu', status: e?.status || undefined, message: String(e?.message || e || '').slice(0, 300),
+    detail: e?.detail ? String(e.detail).slice(0, 500) : undefined,
+  }) };
+}
+
 // Opérations tirées d'une correction de Gemini.
 function opsGemini(r, { carte, paquet, reponse, t, appareil }) {
   const ops = [];
@@ -73,7 +83,10 @@ export async function corriger({ carte, paquet, reponse, donnees, gemini = {}, e
     return { resultat: r, ops: opsGemini(r, { carte, paquet, reponse: texte, t: instant(maintenant), appareil }) };
   } catch (e) {
     if (!(e instanceof ErreurGemini)) throw e;
-    return { resultat: { ...local('hors-ligne'), erreurGemini: { code: e.code, message: e.message } }, ops: [] };
+    return {
+      resultat: { ...local('hors-ligne'), erreurGemini: { code: e.code, message: e.message } },
+      ops: [opErreur(e, { contexte: 'correction', modele: modeleDe(gemini, donnees, 'correction'), maintenant, appareil })],
+    };
   }
 }
 
@@ -88,8 +101,15 @@ export async function contester({
   const { cle, fetch } = gemini || {};
   if (!cle || !enLigne) throw new Error('La contestation demande une connexion et la clé Gemini.');
   const texte = String(reponse ?? '').trim();
-  const avis = await contesterGemini(carte, texte, resultat, raison, contexte(carte, donnees),
-    { cle, modele: modeleDe(gemini, donnees, 'contestation'), fetch });
+  let avis;
+  try {
+    avis = await contesterGemini(carte, texte, resultat, raison, contexte(carte, donnees),
+      { cle, modele: modeleDe(gemini, donnees, 'contestation'), fetch });
+  } catch (e) {
+    // L'appelant affiche l'erreur et enregistre e.ops (journal des erreurs).
+    if (e instanceof ErreurGemini) e.ops = [opErreur(e, { contexte: 'contestation', modele: modeleDe(gemini, donnees, 'contestation'), maintenant, appareil })];
+    throw e;
+  }
   const t = instant(maintenant);
   const cas = issue => ({ type: 'a-revoir', cas: sansVide({
     id: `${appareil}-${t}`, ts: t, type: 'contestation', paquet, carte: carte.id, reponse: texte,

@@ -130,6 +130,27 @@ test('dossier abîmé : cartes, barèmes, fiches', async () => {
   assert.deepEqual(messages(erreurs, 'paquets/p1.json'), []);
 });
 
+test('commentaire et moyen mnémotechnique : facultatifs, texte brut, longueur', async () => {
+  const bon = { ...carteVg, commentaire: 'Le VG pousse contre l\'obstacle aortique : surcharge de pression, donc hypertrophie concentrique.', mnemo: 'RAo : le VG fait de la muscu.' };
+  const mauvais = [
+    { ...carteVg, id: 'p1-11', commentaire: '' },
+    { ...carteVg, id: 'p1-12', mnemo: 42 },
+    { ...carteVg, id: 'p1-13', commentaire: '<b>gras</b>' },
+    { ...carteVg, id: 'p1-14', commentaire: 'x'.repeat(701) },
+    { ...carteVg, id: 'p1-15', mnemo: 'Le ventricule gauche.' },
+  ];
+  const dossier = await ecrireDossier('commentaires', { ...PROPRE, 'paquets/p1.json': { ...PROPRE['paquets/p1.json'], cartes: [bon, carteTrou, ...mauvais] } });
+  const { erreurs, avertissements } = await verifierDossier(dossier);
+  const e = c => messages(erreurs, 'paquets/p1.json', c).join('\n');
+  const a = c => messages(avertissements, 'paquets/p1.json', c).join('\n');
+  assert.equal(e('p1-01') + a('p1-01'), '');
+  assert.match(e('p1-11'), /« commentaire » doit être un texte non vide/);
+  assert.match(e('p1-12'), /« mnemo » doit être un texte non vide/);
+  assert.match(e('p1-13'), /« commentaire » : texte brut attendu, sans balise/);
+  assert.match(a('p1-14'), /« commentaire » trop long \(701 caractères, 700 au plus\)/);
+  assert.match(a('p1-15'), /« mnemo » répète la réponse attendue/);
+});
+
 test('dossier abîmé : QCM et plan', async () => {
   const dossier = join(racine, 'abime');
   const { erreurs, avertissements, stats } = await verifierDossier(dossier);

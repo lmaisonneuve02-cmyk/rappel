@@ -60,11 +60,13 @@ Un cours est « en cartes » si `paquet` est non nul et que `paquets/<paquet>.js
 ```json
 {"id": "cv-cm06", "nom": "CV · CM6 Artères et veines", "ue": "cv", "ordre": 3, "source": "…",
  "cartes": [{"id": "cv6-01", "type": "fait", "q": "…", "a": "…", "fiche": "cv-cm06", "svg": "<svg…> (rare)",
+             "commentaire": "le pourquoi, 1 à 3 phrases (facultatif)", "mnemo": "moyen mnémotechnique (facultatif)",
              "bareme": {"idees": [{"id": "k1", "texte": "…", "formulations": ["…", "…"], "obligatoire": true}],
                         "pieges": [{"si": "sympathique", "sauf": "parasympathique", "pourquoi": "…"}]}}]}
 ```
 - `type` : `fait` | `cloze` | `raisonnement`. Pour `cloze`, la question contient les trous `{{réponse}}` et `a` est absent ; chaque trou est une idée obligatoire (le barème peut préciser leurs formulations, dans l'ordre des trous, ids `t1`, `t2`…).
 - Identifiants de cartes uniques dans tout le dossier.
+- `commentaire` et `mnemo` (26 oct. 2026) : texte brut, facultatifs, affichés après la réponse quel que soit le verdict (« Pour comprendre », « Pour retenir ») ; au plus 700 et 250 caractères (avertissement au-delà) ; jamais recopiés d'un cours ou d'une fiche LiSA.
 - `bareme` peut manquer sur une carte : le correcteur en déduit alors un à partir de `a` (méthode de v1, `splitRef`).
 
 ### `fiches/<id>.json`

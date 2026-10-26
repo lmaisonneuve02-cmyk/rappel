@@ -57,6 +57,16 @@ function liste(titre, items, classe) {
   return h('section', { class: ['bloc-liste', classe] }, h('h3', { class: 'petit-titre', text: titre }), h('ul', null, l.map(x => h('li', { text: x }))));
 }
 
+// Commentaire de la carte (le pourquoi) et moyen mnémotechnique : après la réponse, quel que soit le verdict.
+function pourComprendre(carte) {
+  const texte = x => (typeof x === 'string' ? x.trim() : '');
+  const commentaire = texte(carte?.commentaire), mnemo = texte(carte?.mnemo);
+  if (!commentaire && !mnemo) return null;
+  return h('section', { class: 'bloc-liste bloc-liste--comprendre' },
+    commentaire ? [h('h3', { class: 'petit-titre', text: 'Pour comprendre' }), h('p', { class: 'commentaire', text: commentaire })] : null,
+    mnemo ? [h('h3', { class: 'petit-titre', text: 'Pour retenir' }), h('p', { class: 'mnemo', text: mnemo })] : null);
+}
+
 function ficheDe(donnees, carte, paquet) {
   if (carte?.fiche && donnees.fiches?.[carte.fiche]) return donnees.fiches[carte.fiche];
   return donnees.fiches?.[paquet] || null;
@@ -435,6 +445,7 @@ export function creer(ctx, params = {}) {
       bandeauVerdict,
       notes,
       corps,
+      pourComprendre(carte),
       fiche ? h('button', { type: 'button', class: 'lien lien--fiche', onclick: () => ouvrirFiche(fiche) }, icone('fiche'), `Voir la fiche : ${titreFiche(fiche)}`) : null,
       pied,
       zoneContestation);

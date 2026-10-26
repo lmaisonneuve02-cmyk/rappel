@@ -23,7 +23,9 @@
      }
     ],
     "pieges": []
-   }
+   },
+   "commentaire": "Hexa vient du grec « six », comme dans hexagone et hexapode.",
+   "mnemo": "La France, l'Hexagone : six côtés sur la carte."
   },
   {
    "id": "for-02",
@@ -49,7 +51,9 @@
       "pourquoi": "Isocèle : seulement deux côtés égaux."
      }
     ]
-   }
+   },
+   "commentaire": "Équi- (égal) et -latéral (côté) : les trois côtés sont égaux, donc les trois angles aussi (60°).",
+   "mnemo": "Équilatéral = égal partout."
   },
   {
    "id": "for-03",

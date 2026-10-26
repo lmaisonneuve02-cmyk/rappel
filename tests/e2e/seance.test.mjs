@@ -324,6 +324,10 @@ test('toujours répondre : pas d\'auto-évaluation, « Indice » plafonné à «
     await repondre(page, refText(c));
     assert.equal(await mot(page), 'Partiel');
     await page.getByText("Juste, mais avec l'indice : compté partiel.").waitFor();
+    // Commentaire et moyen mnémotechnique de la carte, après la réponse.
+    await page.locator('.bloc-liste--comprendre .commentaire', { hasText: c.commentaire }).waitFor();
+    await page.locator('.bloc-liste--comprendre .mnemo', { hasText: c.mnemo }).waitFor();
+    await verifierEcran(page, 'commentaire');
     assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
     await suivant(page);
     // Carte suivante : l'indice est oublié, une réponse juste reste juste.

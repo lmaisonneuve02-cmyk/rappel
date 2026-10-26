@@ -6,7 +6,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { refText, clozeAnswers, creerIdf } from '../js/texte.js';
+import { refText, clozeAnswers, creerIdf, normaliser } from '../js/texte.js';
 import { corrigerLocal, verifierBareme } from '../js/correcteur.js';
 
 const TYPES_CARTE = ['fait', 'cloze', 'raisonnement'];
@@ -15,6 +15,8 @@ const STATUTS_QCM = ['valide', 'brouillon', 'signale'];
 const LETTRES = ['A', 'B', 'C', 'D', 'E'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DETAILS = 20;
+const MAX_COMMENTAIRE = 700;   // caractères : quelques phrases, pas un cours
+const MAX_MNEMO = 250;
 export const SANS_BAREME = 'pas de barème : la correction de l\'appareil déduit les idées de la réponse attendue';
 
 const USAGE = `Usage : node outils/verifier-donnees.mjs <dossier rappel> [--exiger-baremes] [--json]
@@ -152,6 +154,16 @@ function verifierCarte(c, n, fichier, ctx) {
   if (c.svg != null) {
     if (typeof c.svg !== 'string') err('« svg » doit être un texte');
     else if (!/^\s*<svg[\s>]/.test(c.svg)) avert('« svg » ne commence pas par <svg');
+  }
+  // Commentaire (le pourquoi, montré après la réponse) et moyen mnémotechnique : facultatifs, texte brut.
+  for (const [champ, max] of [['commentaire', MAX_COMMENTAIRE], ['mnemo', MAX_MNEMO]]) {
+    if (c[champ] == null) continue;
+    if (!nonVide(c[champ])) err(`« ${champ} » doit être un texte non vide (ou absent)`);
+    else {
+      if (c[champ].length > max) avert(`« ${champ} » trop long (${c[champ].length} caractères, ${max} au plus)`);
+      if (/<[a-z/!]/i.test(c[champ])) err(`« ${champ} » : texte brut attendu, sans balise`);
+      if (nonVide(c.a) && normaliser(c[champ]) === normaliser(c.a)) avert(`« ${champ} » répète la réponse attendue`);
+    }
   }
 
   const avecBareme = c.bareme != null;

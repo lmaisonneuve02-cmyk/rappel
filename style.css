@@ -402,6 +402,9 @@ select.champ-texte { appearance: auto; }
 .verdict--nsp .verdict__icone, .verdict--nsp .verdict__mot { color: var(--vein); }
 .bloc-liste { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--rayon); background: var(--surface); }
 .bloc-liste ul { margin: 0; padding-left: 1.2em; display: grid; gap: 3px; }
+.bloc-liste--comprendre { border-left: 3px solid var(--vein); border-left-width: 4px; }
+.commentaire { margin: 0 0 6px; }
+.mnemo { margin: 0; font-style: italic; }
 .bloc-liste--manque { border-left: 4px solid var(--partiel); }
 .bloc-liste--erreur { border-left: 4px solid var(--faux); background: var(--faux-pale); }
 .bloc-liste--juste { border-left: 4px solid var(--juste); }

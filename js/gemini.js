@@ -676,9 +676,11 @@ async function appeler(requete, { cle, modele, fetch: f, delai, pause = PAUSE_RE
       throw erreur;
     }
   } catch (e) {
-    if (e instanceof ErreurGemini) throw e;
-    if (ctl.signal.aborted) throw new ErreurGemini('delai');
-    throw new ErreurGemini('reseau', undefined, { detail: String(e?.message || e) });
+    const err = e instanceof ErreurGemini ? e
+      : ctl.signal.aborted ? new ErreurGemini('delai')
+        : new ErreurGemini('reseau', undefined, { detail: String(e?.message || e) });
+    err.modele ||= modele;   // pour le journal d'erreurs : le modèle qui a échoué
+    throw err;
   } finally {
     clearTimeout(minuterie);
   }
@@ -697,6 +699,9 @@ export function oublierModeles() { remplacants.clear(); listeModeles = null; }
 
 const remplacable = e => e instanceof ErreurGemini
   && (e.status === 404 || e.code === 'quota' || (e.status === 400 && /model/i.test(e.detail || '')));
+// Surcharge (503 « high demand », 27 oct. : feuille blanche impossible) : après le nouvel essai d'appeler,
+// on passe aussi à un autre modèle, sans en faire le modèle de la session s'il n'a pas répondu.
+const basculable = e => remplacable(e) || (e instanceof ErreurGemini && e.code === 'serveur');
 
 export async function listerModeles({ cle, fetch: f } = {}) {
   const envoyer = f || ((url, options) => globalThis.fetch(url, options));
@@ -754,9 +759,9 @@ async function appelerAvecSecours(requete, opts, usage) {
     const echec = async e => {
       enCours--;
       if (fini) return;
-      if (!remplacable(e) && e?.code !== 'delai') { finir(); ko(e); return; }
+      if (!basculable(e) && e?.code !== 'delai') { finir(); ko(e); return; }
       if (!erreur || (erreur.code === 'delai' && e?.code !== 'delai')) erreur = e;
-      if (remplacable(e) && lances < 4) {
+      if (basculable(e) && lances < 4) {
         const m = await suivant();
         if (fini) return;
         if (m) { essayer(m, opts.delai); return; }

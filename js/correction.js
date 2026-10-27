@@ -38,7 +38,7 @@ function jeNeSaisPas(carte) {
 export function opErreur(e, { contexte, modele, maintenant, appareil = 'inconnu' }) {
   const t = instant(maintenant);
   return { type: 'erreur', ligne: sansVide({
-    id: `${appareil}-${t}-${contexte}`, ts: t, t: isoParis(t), appareil, contexte, modele,
+    id: `${appareil}-${t}-${contexte}`, ts: t, t: isoParis(t), appareil, contexte, modele: modele || e?.modele,
     code: e?.code || 'inconnu', status: e?.status || undefined, message: String(e?.message || e || '').slice(0, 300),
     detail: e?.detail ? String(e.detail).slice(0, 500) : undefined,
   }) };

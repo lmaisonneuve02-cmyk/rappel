@@ -556,7 +556,7 @@ describe('modèle de secours', () => {
   });
 
   // Faux Google : liste des modèles, 404 pour le modèle retiré, réponse pour les autres.
-  function routeur(retires, { quota = [] } = {}) {
+  function routeur(retires, { quota = [], surcharge = [] } = {}) {
     const appels = [];
     const f = async (url, options = {}) => {
       appels.push(url);
@@ -565,6 +565,7 @@ describe('modèle de secours', () => {
       }
       const modele = decodeURIComponent(url.slice(BASE.length).split(':')[0]);
       if (retires.includes(modele)) return new Response(JSON.stringify({ error: { code: 404, message: `models/${modele} is not found`, status: 'NOT_FOUND' } }), { status: 404 });
+      if (surcharge.includes(modele)) return new Response(JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand.', status: 'UNAVAILABLE' } }), { status: 503 });
       if (quota.includes(modele)) return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded', status: 'RESOURCE_EXHAUSTED' } }), { status: 429 });
       const r = succes(correctionJuste);
       return new Response(JSON.stringify(r.corps), { status: 200 });
@@ -598,6 +599,20 @@ describe('modèle de secours', () => {
     const refus = fauxFetch(erreur(403, 'PERMISSION_DENIED', 'API key not valid'));
     await assert.rejects(corrigerGemini(carteFait, 'x', {}, opts(refus)), e => e.code === 'cle');
     assert.equal(refus.appels.length, 1);
+    oublierModeles();
+  });
+
+  test('modèle surchargé (503, après son nouvel essai) : un autre de la famille ; tous surchargés : erreur « serveur » avec le modèle', async () => {
+    oublierModeles();
+    const f = routeur([], { surcharge: ['gemini-3.5-flash-lite'] });
+    const r = await corrigerGemini(carteFait, 'le parasympathique', {}, { ...opts(f), modele: 'gemini-3.5-flash-lite', relance: 0 });
+    assert.equal(r.verdict, 'juste');
+    assert.deepEqual(f.appels.map(u => (u.includes('/models?') ? 'liste' : u.replace(BASE, '').split(':')[0])),
+      ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite', 'liste', 'gemini-2.5-flash-lite']);
+    oublierModeles();
+    const tous = routeur([], { surcharge: NOMS });
+    await assert.rejects(corrigerGemini(carteFait, 'x', {}, { ...opts(tous), modele: 'gemini-3.5-flash-lite', relance: 0 }),
+      e => e.code === 'serveur' && /flash-lite/.test(e.modele));
     oublierModeles();
   });
 });

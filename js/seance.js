@@ -352,7 +352,7 @@ export class Seance {
   }
 
   // mode : celui de la séance par défaut ('ecrit' quand une carte sans leurre possible s'écrit en séance QCM).
-  noter({ verdict, correcteur, reponse = '', duree, confiance, indice, mode = this.mode, maintenant, appareil = 'inconnu' }) {
+  noter({ verdict, correcteur, reponse = '', duree, confiance, indice, mode = this.mode, cochees, maintenant, appareil = 'inconnu' }) {
     const el = this.courant();
     if (!el) throw new Error('La séance est terminée : plus aucune carte à noter.');
     const t = maintenant ?? (this.horloge ? this.horloge() : Date.now());
@@ -364,7 +364,8 @@ export class Seance {
     const ligne = sansVide({
       id: `${appareil}-${t}`, ts: t, t: isoParis(t), appareil, paquet: el.paquet, carte: el.carteId,
       reponse, verdict, correcteur, note, nouvelle: !etatAvant, duree, confiance, indice: indice || undefined,
-      mode: mode === 'qcm' ? 'qcm' : undefined,
+      mode: mode === 'qcm' || mode === 'coche' ? mode : undefined,
+      cochees: mode === 'coche' && Array.isArray(cochees) ? cochees : undefined,
     });
     const ops = [
       { type: 'srs', paquet: el.paquet, carte: el.carteId, etat: etatApres },

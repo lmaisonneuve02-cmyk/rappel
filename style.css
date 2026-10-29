@@ -347,6 +347,21 @@ select.champ-texte { appearance: auto; }
   display: grid; place-items: center; font-family: var(--f-mono); font-weight: 500;
 }
 .choix-qcm__texte { padding-top: 3px; overflow-wrap: anywhere; }
+.idees-coche { display: grid; gap: 10px; }
+.idee-coche {
+  appearance: none; display: flex; gap: 12px; align-items: flex-start; text-align: left; cursor: pointer; width: 100%;
+  min-height: 52px; padding: 12px 14px; border: 1.5px solid var(--rule); border-radius: var(--rayon); background: var(--surface);
+  color: inherit; font: inherit;
+}
+.idee-coche:focus-visible { outline: 3px solid var(--vein); outline-offset: 2px; }
+.idee-coche__case { flex: none; width: 26px; height: 26px; margin-top: 1px; border-radius: 6px; border: 2px solid var(--muted); display: grid; place-items: center; }
+.idee-coche__texte { padding-top: 2px; overflow-wrap: anywhere; }
+.idee-coche__facultatif { color: var(--muted); font-size: 0.85rem; padding-top: 4px; }
+.idee-coche--oui { border-color: var(--juste); background: var(--juste-pale); }
+.idee-coche--oui .idee-coche__case { border-color: var(--juste); background: var(--juste); }
+.idee-coche--oui .idee-coche__case::after { content: ''; width: 7px; height: 13px; border: solid var(--surface); border-width: 0 3px 3px 0; transform: translateY(-2px) rotate(45deg); }
+.case-erreur { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+.case-erreur input { width: 22px; height: 22px; accent-color: var(--faux); }
 .puce { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; }
 .puce .icone { width: 14px; height: 14px; stroke-width: 2.4; }
 .puce--revision { color: var(--vein); background: var(--vein-pale); }

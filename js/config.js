@@ -4,6 +4,7 @@ export const MODELES_DEFAUT = { correction: 'gemini-3.5-flash-lite', contestatio
 export const CLES = {
   jeton: 'rappel.jeton', gemini: 'rappel.gemini', depot: 'rappel.depot', appareil: 'rappel.appareil',
   voixNom: 'rappel.voixNom', theme: 'rappel.theme', ecoute: 'rappel.ecoute',
+  reponse: 'rappel.reponse',
 };
 export const OBJECTIF_DEFAUT = 60;
-export const VERSION = '2.2.2';
+export const VERSION = '2.3.0';

@@ -1,6 +1,8 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
 import { Seance, apportDuFiltre, revisionsEnAvance, qcmRestants } from '../seance.js';
 import { propositionsCarte, resultatQcmCarte } from '../qcmcartes.js';
+import { ideesACocher, resultatCoche, DELAI_RETOURNER } from '../coche.js';
+import { CLES } from '../config.js';
 import { corriger, contester, opErreur } from '../correction.js';
 import { expliquerGemini } from '../gemini.js';
 import { corrigerLocal, indice, plafonnerIndice } from '../correcteur.js';
@@ -12,6 +14,7 @@ import { ecouteGeminiDisponible, libererMicro } from '../ecoutegemini.js';
 import {
   h, vider, bouton, boutonConfirme, icone, toast, annoncer, ouvrirFiche, ficheNoeud, titreFiche,
   verdictNoeud, VERDICTS, BADGES, imageSvg, nb, estTactile, aideVue, compterAide, empiler, depiler, bandeau, texteEncore, texteAtteint,
+  lireLocal,
 } from './commun.js';
 
 const CONSIGNES = {
@@ -212,6 +215,10 @@ export function creer(ctx, params = {}) {
     // Séance QCM : propositions tirées à chaque affichage ; sans leurre possible, la carte s'écrit.
     e.qcm = modeQcm ? propositionsCarte(e.carte, e.paquet, donnees) : null;
     if (e.qcm) { afficherCarteQcm(e); return; }
+    // Par défaut (29 oct.) : il répond dans sa tête et coche les idées ; « Écrire ma réponse » garde l'ancien mode.
+    e.cocher = !e.ecrire && lireLocal(CLES.reponse, 'coche') !== 'ecrit' ? ideesACocher(e.carte) : null;
+    if (e.cocher?.length) { afficherCarteCoche(e); return; }
+    e.cocher = null;
     etat = 'carte';
     const { carte, paquet, nouvelle, rang, total } = e;
     majHaut(rang, total);
@@ -270,6 +277,95 @@ export function creer(ctx, params = {}) {
     // Sur PC le champ prend le focus ; sur téléphone, seulement si le clavier était ouvert (pas sur la 1re carte).
     if (!estTactile() || clavierOuvert) champ.focus({ preventScroll: true });
     else contenu.querySelector('h1')?.focus({ preventScroll: true });
+  }
+
+  // --- Étape : une carte à cocher (réponse dans sa tête) ---
+  function etiquetteCarte(e, mode) {
+    const { paquet, nouvelle, carte } = e;
+    const encore = ratees.has(paquet + '/' + carte.id);
+    return h('p', { class: 'etiquette-carte' },
+      h('span', { class: ['puce', nouvelle && !encore ? 'puce--nouvelle' : 'puce--revision'] }, icone(nouvelle && !encore ? 'etoile' : 'boucle'),
+        encore ? 'Encore une fois' : nouvelle ? 'Nouvelle' : 'Révision'),
+      h('span', { class: 'etiquette-carte__paquet', text: donnees.paquets[paquet]?.nom || paquet }),
+      mode ? h('span', { class: 'etiquette-carte__mode', text: mode }) : null);
+  }
+
+  function afficherCarteCoche(e) {
+    etat = 'carte';
+    const { carte, rang, total } = e;
+    majHaut(rang, total);
+    debutCarte = ctx.maintenant();
+    arreterMicro();
+    e.indice = false;
+    const texteIndice = indice(carte);
+    const zoneIndice = h('div', { class: 'indice', 'aria-live': 'polite' });
+    if (texteIndice) {
+      vider(zoneIndice, h('button', { type: 'button', class: 'lien lien--indice', onclick: () => {
+        e.indice = true;
+        vider(zoneIndice, h('p', { class: 'indice__texte' }, h('span', { class: 'indice__titre', text: 'Indice : ' }), h('span', { class: 'indice__mots', text: texteIndice })),
+          h('p', { class: 'aide', text: "Avec l'indice, une réponse juste compte « partiel »." }));
+      } }, 'Indice'));
+    }
+    const ecrire = h('button', { type: 'button', class: 'lien', text: 'Écrire ma réponse', onclick: () => { e.ecrire = true; afficherCarte(e); } });
+    // Retourner : pas avant DELAI_RETOURNER, pour chercher vraiment la réponse.
+    const retourner = bouton('Retourner', { principal: true, attrs: { disabled: true }, onClick: () => afficherCoche(e) });
+    const attente = h('p', { class: 'aide aide--centre', 'aria-live': 'off', text: 'Cherche la réponse dans ta tête…' });
+    const pret = setTimeout(() => {
+      if (etat !== 'carte') return;
+      retourner.disabled = false;
+      attente.textContent = '';
+      actionEntree = () => afficherCoche(e);
+    }, DELAI_RETOURNER);
+    e.minuteries = [pret];
+    actionEntree = null;
+    vider(contenu,
+      etiquetteCarte(e),
+      questionNoeud(carte),
+      h('p', { class: 'consigne', text: 'Réponds dans ta tête (ou à voix basse), puis retourne la carte.' }),
+      imageSvg(carte.svg),
+      zoneIndice,
+      h('p', { class: 'aide aide--ligne' }, ecrire));
+    vider(barre, h('div', { class: 'barre-action__pile' }, attente, h('div', { class: 'barre-action__rang barre-action__rang--carte' },
+      bouton('Je ne sais pas', { onClick: () => { clearTimeout(pret); corrigerCarte(e, '', true); } }), retourner)));
+    contenu.querySelector('h1')?.focus({ preventScroll: true });
+  }
+
+  // Carte retournée : il coche les idées qu'il avait (ordre mélangé) ; l'appli en tire le verdict.
+  function afficherCoche(e) {
+    if (etat !== 'carte') return;
+    etat = 'coche';
+    actionEntree = null;
+    const cochees = new Set();
+    const boutons = e.cocher.map(i => {
+      const b = h('button', { type: 'button', class: 'idee-coche', 'aria-pressed': 'false' },
+        h('span', { class: 'idee-coche__case', 'aria-hidden': 'true' }),
+        h('span', { class: 'idee-coche__texte', text: i.texte }),
+        i.obligatoire ? null : h('span', { class: 'idee-coche__facultatif', text: ' (facultatif)' }));
+      b.addEventListener('click', () => {
+        if (cochees.has(i.id)) cochees.delete(i.id); else cochees.add(i.id);
+        b.setAttribute('aria-pressed', String(cochees.has(i.id)));
+        b.classList.toggle('idee-coche--oui', cochees.has(i.id));
+      });
+      return b;
+    });
+    const erreur = h('input', { type: 'checkbox', id: 'coche-erreur' });
+    const valider = () => {
+      if (etat !== 'coche') return;
+      etat = 'correction';
+      actionEntree = null;
+      const r = resultatCoche(e.cocher, cochees, { erreur: erreur.checked });
+      noter(e, e.indice ? plafonnerIndice(r) : r, '', [], true, [...cochees]);
+    };
+    vider(contenu,
+      etiquetteCarte(e),
+      questionNoeud(e.carte, { petite: true }),
+      h('p', { class: 'consigne', text: 'Coche ce que tu avais, même dit avec d\'autres mots.' }),
+      h('div', { class: 'idees-coche', role: 'group', 'aria-label': 'Idées attendues' }, boutons),
+      h('label', { class: 'case-erreur', for: 'coche-erreur' }, erreur, " J'ai aussi dit quelque chose de faux"),
+      h('p', { class: 'aide', text: "Toutes les idées : juste. Une partie : partiel. Aucune : faux. L'ordre change à chaque fois." }));
+    vider(barre, bouton('Valider', { principal: true, onClick: valider }));
+    actionEntree = valider;
+    contenu.querySelector('h1')?.focus({ preventScroll: true });
   }
 
   // --- Étape : une carte en QCM (jour sans élan) ---
@@ -352,12 +448,12 @@ export function creer(ctx, params = {}) {
   }
 
   // Note la carte, enregistre les opérations, puis affiche le verdict (ou passe à la suite).
-  function noter(e, resultat, reponse, opsCorrection, montrer) {
+  function noter(e, resultat, reponse, opsCorrection, montrer, cochees) {
     const t = ctx.maintenant();
     const avant = ctx.cartes();
     const note = seance.noter({
       verdict: resultat.verdict, correcteur: resultat.correcteur, reponse, duree: Math.max(0, t - debutCarte),
-      confiance: resultat.confiance, indice: !!e.indice, mode: e.qcm ? 'qcm' : 'ecrit', maintenant: t, appareil: ctx.appareil,
+      confiance: resultat.confiance, indice: !!e.indice, mode: e.qcm ? 'qcm' : e.cocher ? 'coche' : 'ecrit', cochees, maintenant: t, appareil: ctx.appareil,
     });
     for (const op of [...opsCorrection, ...note.ops]) ctx.sync.ajouter(op);
     donnees = ctx.donnees();
@@ -407,7 +503,7 @@ export function creer(ctx, params = {}) {
     const fiche = ficheDe(donnees, carte, paquet);
     const cles = ctx.cles();
     const peutContester = !v.conteste && (r.verdict === 'partiel' || r.verdict === 'faux')
-      && !['je-ne-sais-pas', 'contestation', 'qcm'].includes(r.correcteur) && !v.e.qcm && !!cles.gemini && ctx.enLigne()
+      && !['je-ne-sais-pas', 'contestation', 'qcm', 'coche'].includes(r.correcteur) && !v.e.qcm && !!cles.gemini && ctx.enLigne()
       && !(v.e.indice && r.verdict === 'partiel'); // après un indice, « partiel » est le plafond
 
     const bandeauVerdict = verdictNoeud(r, { lignes: [nsp ? `Pas grave. ${delai}` : delai, h('p', { class: 'verdict__effet', text: ligneEffet })] });

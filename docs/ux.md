@@ -64,3 +64,6 @@ Tutoiement, phrases courtes, verbes d'action sur les boutons. Aucun de : FSRS, S
 - **Toasts** : en haut, sous l'en-tête, jamais sur la zone du pouce.
 - **Non retenus** (plus simple) : reprise exacte d'une séance après fermeture, minuteur de pause, sons de repère, texte « grand », balayages.
 - **Technique** : la seule valeur posée dynamiquement en CSS est `--clavier` (hauteur du clavier, par le CSSOM, autorisé par la CSP) ; les barres de progression sont des `<progress>`.
+
+## Cocher les idées (2.3.0, 29 oct. 2026)
+Mode de réponse par défaut (réglage « Façon de répondre », par appareil ; « Écrire ma réponse » reste sur chaque carte). Il répond dans sa tête, « Retourner » ne s'active qu'après 3 s, puis il coche les idées du barème qu'il avait, dans un ordre mélangé à chaque fois, et peut signaler « J'ai aussi dit quelque chose de faux ». L'appli tire le verdict : toutes les idées obligatoires → juste (partiel si erreur signalée), une partie → partiel, aucune → faux. Pas de Gemini, pas de contestation. Journal : `mode: "coche"`, `correcteur: "coche"`, `cochees` (ids). Garde-fous : contrôles du lundi, du mercredi et du vendredi, feuilles blanches. Raison : Gemini lent (≈ 10 s) et peu fiable sur les reformulations ; écrire ou parler trop coûteux (musique coupée).

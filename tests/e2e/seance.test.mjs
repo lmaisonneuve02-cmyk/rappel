@@ -399,6 +399,55 @@ test('QCM rapide : 4 réponses mélangées, bonne réponse = partiel, lignes « 
 });
 
 
+test('cocher les idées : retourner après 3 s, idées mélangées, verdict tiré des coches, lignes « mode: coche »', async () => {
+  const o = await ouvrir(navigateur, serveur.base);
+  const { page, faux } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.evaluate(() => localStorage.removeItem('rappel.reponse'));
+    await page.reload();
+    await page.locator('.barre-action .btn--principal', { hasText: 'Commencer · 5 cartes' }).click();
+    await page.getByText('Réponds dans ta tête (ou à voix basse), puis retourne la carte.').waitFor();
+    assert.equal(await page.locator('#reponse').count(), 0, 'pas de champ à remplir');
+    const retourner = page.locator('.barre-action .btn--principal', { hasText: 'Retourner' });
+    assert.ok(await retourner.isDisabled(), 'pas avant 3 s');
+    await page.waitForFunction(() => !document.querySelector('.barre-action .btn--principal').disabled, null, { timeout: 5000 });
+    // 1) Toutes les idées cochées : juste.
+    const c1 = await question(page);
+    await retourner.click();
+    await page.locator('.idee-coche').first().waitFor();
+    const n1 = await page.locator('.idee-coche').count();
+    assert.ok(n1 >= 1);
+    for (let i = 0; i < n1; i++) await page.locator('.idee-coche').nth(i).click();
+    await verifierEcran(page, 'cocher');
+    await clic(page, 'Valider');
+    assert.equal(await mot(page), 'Juste');
+    assert.equal(await page.getByRole('button', { name: 'Je conteste' }).count(), 0);
+    await suivant(page);
+    // 2) Rien de coché : faux.
+    await page.waitForFunction(() => !document.querySelector('.barre-action .btn--principal').disabled, null, { timeout: 5000 });
+    const c2 = await question(page);
+    await page.locator('.barre-action .btn--principal', { hasText: 'Retourner' }).click();
+    await clic(page, 'Valider');
+    assert.equal(await mot(page), 'Faux');
+    await suivant(page);
+    // 3) « Écrire ma réponse » : l'ancien mode, pour cette carte (après la micro-fiche des nouvelles, s'il y en a une).
+    await page.locator('button', { hasText: /J'ai lu, on y va|Écrire ma réponse/ }).first().waitFor();
+    if (await page.getByRole('button', { name: "J'ai lu, on y va" }).count()) await clic(page, "J'ai lu, on y va");
+    await clic(page, 'Écrire ma réponse');
+    await page.locator('#reponse').waitFor();
+    await terminerSeance(page);
+    await attendre(() => faux.commits().length === 2, { message: 'envoi de fin de séance' });
+    const lignes = fichiersDepot(faux)[`rappel/progres/reponses/${MOIS()}.jsonl`];
+    assert.deepEqual(lignes.map(l => [l.carte, l.verdict, l.correcteur, l.mode]), [[c1.id, 'juste', 'coche', 'coche'], [c2.id, 'faux', 'coche', 'coche']]);
+    assert.equal(lignes[0].cochees.length, n1);
+    assert.equal(o.requetesGemini.length, 0);
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
 test('nouvelles imposées et semaine : compteurs, objectif détaillé, nouvelles mêlées dès le début', async () => {
   const fichiers = lireDonnees();
   const reglages = JSON.parse(fichiers['rappel/progres/reglages.json']);

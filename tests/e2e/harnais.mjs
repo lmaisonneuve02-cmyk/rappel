@@ -206,6 +206,7 @@ export async function ouvrir(navigateur, base, { theme = 'clair', jeton = true, 
           localStorage.setItem('rappel.gemini', 'AQ.essai');
           localStorage.setItem('rappel.appareil', 'tel-essai');
           localStorage.setItem('rappel.ecoute', 'navigateur');   // voix simulée : reconnaissance du navigateur
+          localStorage.setItem('rappel.reponse', 'ecrit');       // les tests écrits ; « cocher » a son test
         }
       } catch { /* rien */ }
     });

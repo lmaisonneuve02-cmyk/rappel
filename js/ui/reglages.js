@@ -190,10 +190,22 @@ export function creer(ctx, params = {}) {
       reglerNombre({ id: 'r-vitesse', libelle: 'Vitesse de lecture', valeur: vitesse, min: 0.5, max: 2, pas: 0.1, decimales: 1, unite: ' ×',
         onChange: v => { vitesse = v; enregistrer({ voix: { ...ctx.reglages().voix, ...(enCours?.voix || {}), vitesse: v } }); } }),
       h('div', { class: 'rang-boutons rang-boutons--gauche' }, ecouter),
+      blocReponse(),
       blocReconnaissance(),
       reglerNombre({ id: 'r-silence', libelle: 'Silence avant de corriger', aide: 'Combien de temps j\'attends après ta dernière parole.', valeur: voix.silence || 2.5, min: 1, max: 6, pas: 0.5, decimales: 1, unite: ' s',
         onChange: v => enregistrer({ voix: { ...ctx.reglages().voix, ...(enCours?.voix || {}), silence: v } }) }),
     ];
+  }
+
+  // --- Façon de répondre (29 oct.) : cocher les idées par défaut, ou écrire / dicter ---
+  function blocReponse() {
+    const actuel = lireLocal(CLES.reponse, 'coche') === 'ecrit' ? 'ecrit' : 'coche';
+    const options = [['coche', 'Cocher les idées'], ['ecrit', 'Écrire ou dicter']];
+    return h('fieldset', { class: 'segments' }, h('legend', { class: 'reglage__libelle', text: 'Façon de répondre (sur cet appareil)' }),
+      h('div', { class: 'segments__rang' }, options.map(([v, libelle]) => h('label', { class: 'segment' },
+        h('input', { type: 'radio', name: 'reponse', value: v, checked: actuel === v, onchange: () => ecrireLocal(CLES.reponse, v === 'coche' ? '' : v) }),
+        h('span', { text: libelle })))),
+      h('p', { class: 'aide', text: "Cocher : tu réponds dans ta tête, tu retournes la carte, tu coches les idées que tu avais ; l'appli en tire le verdict, sans attendre Gemini. Sur chaque carte, « Écrire ma réponse » reste possible." }));
   }
 
   // --- Reconnaissance vocale (26 oct.) : Gemini par défaut, navigateur en secours (hors ligne) ---

@@ -18,8 +18,9 @@ import * as suivi from './ui/suivi.js';
 import * as reglages from './ui/reglages.js';
 import * as mainslibres from './ui/mainslibres.js';
 import * as feuille from './ui/feuille.js';
+import * as controle from './ui/controle.js';
 
-const VUES = { accueil, aujourdhui, seance, qcm, suivi, reglages, mainslibres, feuille };
+const VUES = { accueil, aujourdhui, seance, qcm, suivi, reglages, mainslibres, feuille, controle };
 const ONGLETS = [
   ['aujourdhui', "Aujourd'hui", 'soleil'],
   ['qcm', 'QCM', 'qcm'],

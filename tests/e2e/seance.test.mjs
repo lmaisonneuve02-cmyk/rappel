@@ -448,6 +448,41 @@ test('cocher les idées : retourner après 3 s, idées mélangées, verdict tir�
   }
 });
 
+test('contrôle du jour dans l\'appli : seul celui du jour, copie rendue, note au barème, résultat envoyé', async () => {
+  const jour = jourParis(Date.now());
+  const q = (num, vraies) => ({ num, cartes: ['x'], paquet: 'p', enonce: `Question ${num} ?`,
+    propositions: 'ABCDE'.split('').map(l => ({ l, t: `Proposition ${num}${l}`, vrai: vraies.includes(l), expl: `${vraies.includes(l) ? 'Vrai' : 'Faux'} : explication ${num}${l}.` })) });
+  const prepare = { date: jour, type: 'mini', nb_questions: 2, bareme: [1, 0.5, 0.2, 0], questions: [q(1, 'AB'), q(2, 'C')] };
+  const fichiers = { ...lireDonnees(), [`rappel/controles/prepares/${jour}.json`]: JSON.stringify(prepare), 'rappel/controles/prepares/2099-01-05.json': JSON.stringify({ ...prepare, date: '2099-01-05' }) };
+  const o = await ouvrir(navigateur, serveur.base, { fichiers });
+  const { page, faux } = o;
+  try {
+    await page.goto(serveur.base);
+    await page.getByText("À passer avant minuit, sinon tout est bloqué jusqu'à ce que tu le passes.").waitFor();
+    await clic(page, 'Contrôle du jour (2 questions)');
+    await page.getByText('Mini-contrôle du jour').waitFor();
+    assert.equal(await page.locator('.question-controle').count(), 2);
+    await page.locator('.choix-qcm__btn', { hasText: 'Proposition 1A' }).click();
+    await page.locator('.choix-qcm__btn', { hasText: 'Proposition 1B' }).click();
+    await page.locator('.choix-qcm__btn', { hasText: 'Proposition 2D' }).click();   // 2 erreurs : D en trop, C oubliée
+    await verifierEcran(page, 'controle');
+    await page.locator('.barre-action .btn', { hasText: 'Rendre ma copie' }).click();
+    await page.locator('.barre-action .btn', { hasText: 'Touche encore pour rendre' }).click();
+    await page.getByText('Note : 12/20').waitFor();
+    await page.getByText('Faux : explication 2D.').waitFor();
+    assert.equal(await page.getByText('Faux : explication 1C.').count(), 0, 'pas d\'explication pour une proposition juste');
+    await attendre(() => fichiersDepot(faux)[`rappel/controles/${jour}.json`], { message: 'résultat envoyé' });
+    const r = fichiersDepot(faux)[`rappel/controles/${jour}.json`];
+    assert.deepEqual([r.type, r.points, r.note, r.bloque, r.questions.map(x => x.reponse)], ['mini', 1.2, 12, false, ['AB', 'D']]);
+    await clic(page, 'Retour');
+    await clic(page, 'Contrôle du jour : 12/20');
+    await page.getByText('Note : 12/20').waitFor();
+    o.verifierConsole();
+  } finally {
+    await o.fermer();
+  }
+});
+
 test('nouvelles imposées et semaine : compteurs, objectif détaillé, nouvelles mêlées dès le début', async () => {
   const fichiers = lireDonnees();
   const reglages = JSON.parse(fichiers['rappel/progres/reglages.json']);

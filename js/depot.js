@@ -1,6 +1,6 @@
 // Fichiers du dossier rappel/ ↔ données de l'appli, et opérations de synchro.
 import { OBJECTIF_DEFAUT } from './config.js';
-import { moisParis } from './temps.js';
+import { moisParis, jourParis } from './temps.js';
 import { normaliser } from './texte.js';
 import {
   fusionSrs, fusionLignes, fusionCarnet, fusionARevoir, fusionQcmFichier, fusionReglages,
@@ -38,11 +38,16 @@ function relatif(path, racine) {
 // Identifiant utilisable dans un nom de fichier (pas de « / » ni de « .. »).
 const idSur = id => typeof id === 'string' && /^[\w.-]+$/.test(id) && !/^\.+$/.test(id);
 
-const UTILE = /^(plan\.json|(paquets|fiches|qcm|idees)\/[^/]+\.json|progres\/.+\.jsonl?)$/;
+const UTILE = /^(plan\.json|(paquets|fiches|qcm|idees)\/[^/]+\.json|progres\/.+\.jsonl?|controles\/\d{4}-\d{2}-\d{2}\.json)$/;
+const PREPARE = /^controles\/prepares\/(\d{4}-\d{2}-\d{2})\.json$/;
 
-export function cheminUtile(path, racine = 'rappel/') {
+// Contrôles préparés (29 oct.) : seulement celui du jour, pour ne pas voir les suivants.
+export function cheminUtile(path, racine = 'rappel/', jour = null) {
   const r = relatif(path, racine);
-  return r !== null && UTILE.test(r);
+  if (r === null) return false;
+  const m = r.match(PREPARE);
+  if (m) return m[1] === (jour ?? jourParis(Date.now()));
+  return UTILE.test(r);
 }
 
 export function analyser(path, texte) {
@@ -96,6 +101,7 @@ function ordrePaquets(paquets, plan, reglages) {
 export function vue(objets, racine = 'rappel/') {
   const d = {
     plan: null, paquets: {}, ordre: [], fiches: {}, qcm: {}, srs: {}, reponses: [], qcmJournal: [], idees: {}, feuilles: [],
+    controles: {}, prepares: {},
     carnet: { abreviations: {}, cartes: {} }, aRevoir: { cas: [] }, reglages: null,
     exceptions: { jours: {} }, historique: { days: {} }, cartes: {}, calibration: null,
   };
@@ -108,6 +114,8 @@ export function vue(objets, racine = 'rappel/') {
     else if ((m = r.match(/^paquets\/([^/]+)\.json$/))) { if (estObjet(o)) d.paquets[m[1]] = o; }
     else if ((m = r.match(/^fiches\/([^/]+)\.json$/))) { if (estObjet(o)) d.fiches[m[1]] = o; }
     else if ((m = r.match(/^idees\/([^/]+)\.json$/))) { if (estObjet(o)) d.idees[m[1]] = o; }
+    else if ((m = r.match(PREPARE))) { if (estObjet(o)) d.prepares[m[1]] = o; }
+    else if ((m = r.match(/^controles\/(\d{4}-\d{2}-\d{2})\.json$/))) { if (estObjet(o)) d.controles[m[1]] = o; }
     else if ((m = r.match(/^qcm\/([^/]+)\.json$/))) {
       for (const q of tableau(objet(o).qcm)) {
         if (estObjet(q) && q.id != null) d.qcm[q.id] = { ...q, cours: q.cours ?? o.cours ?? m[1], ue: q.ue ?? o.ue };

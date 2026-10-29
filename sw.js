@@ -7,9 +7,9 @@ const COQUILLE = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/config.js', 'js/temps.js', 'js/fsrs.js', 'js/texte.js', 'js/correcteur.js', 'js/gemini.js',
   'js/correction.js', 'js/github.js', 'js/fusion.js', 'js/depot.js', 'js/stockage.js', 'js/sync.js',
-  'js/seance.js', 'js/qcm.js', 'js/qcmcartes.js', 'js/coche.js', 'js/stats.js', 'js/voix.js', 'js/ecoutegemini.js', 'js/feuille.js', 'js/mainslibres.js',
+  'js/seance.js', 'js/qcm.js', 'js/qcmcartes.js', 'js/coche.js', 'js/controle.js', 'js/stats.js', 'js/voix.js', 'js/ecoutegemini.js', 'js/feuille.js', 'js/mainslibres.js',
   'js/ui/commun.js', 'js/ui/accueil.js', 'js/ui/aujourdhui.js', 'js/ui/seance.js', 'js/ui/qcm.js',
-  'js/ui/suivi.js', 'js/ui/reglages.js', 'js/ui/mainslibres.js', 'js/ui/feuille.js',
+  'js/ui/suivi.js', 'js/ui/reglages.js', 'js/ui/mainslibres.js', 'js/ui/feuille.js', 'js/ui/controle.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 const JAMAIS = ['api.github.com', 'generativelanguage.googleapis.com'];

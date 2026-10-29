@@ -2,6 +2,7 @@
 import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour, qcmRestants, QCM_MAX } from '../seance.js';
 import { qcmProposables } from '../qcm.js';
 import { feuillesDeLaSemaine } from '../feuille.js';
+import { controleDuJour } from '../controle.js';
 import { estDisponible } from '../fsrs.js';
 import { jourParis, finJourParis } from '../temps.js';
 import { reconnaissanceDisponible } from '../voix.js';
@@ -197,6 +198,15 @@ export function creer(ctx, params = {}) {
         h('p', { class: 'aide', text: resteQcm > 0
           ? `Jour sans élan ? Choisis parmi 4 réponses. Compte « partiel », ${QCM_MAX} cartes au plus par jour (encore ${resteQcm}).`
           : `QCM rapide : ${QCM_MAX} cartes aujourd'hui, c'est le plafond. La suite en écrivant.` })));
+    }
+    // Contrôle du jour (29 oct.) : lundi, mercredi, vendredi ; bloquant s'il n'est pas passé à minuit.
+    const ctl = controleDuJour(d, now);
+    if (ctl) {
+      const fait = ctl.resultat;
+      blocs.unshift(h('div', { class: 'mains-libres-entree' },
+        bouton(fait ? `Contrôle du jour : ${String(fait.note).replace('.', ',')}/20` : `Contrôle du jour (${ctl.prepare.questions.length} questions)`,
+          { icone: 'qcm', classe: 'btn--large', onClick: () => ctx.aller('controle') }),
+        h('p', { class: 'aide', text: fait ? 'Rendu. Touche pour revoir le corrigé.' : 'À passer avant minuit, sinon tout est bloqué jusqu\'à ce que tu le passes.' })));
     }
     // Feuille blanche (26 oct.) : 10 par semaine au moins.
     const objFeuilles = Number(d.reglages.feuillesSemaine) || 0;

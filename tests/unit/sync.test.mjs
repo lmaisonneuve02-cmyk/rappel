@@ -117,6 +117,23 @@ test('chargement initial : seuls les fichiers utiles sont lus', async () => {
   s.arreter();
 });
 
+test('nouveau jour, même commit : arbre relu, le contrôle préparé du jour chargé (et seulement lui)', async () => {
+  const jour = ms => new Date(ms).toISOString().slice(0, 10);
+  const j1 = jour(T), j2 = jour(T + 864e5);
+  const fichiers = { ...depotTest(), [`${R}controles/prepares/${j2}.json`]: '{"date":"x","questions":[{"num":1}]}\n', [`${R}controles/prepares/2099-01-01.json`]: '{"questions":[]}\n' };
+  const gh = creerFauxGitHub({ fichiers });
+  const stockage = await ouvrirStockage();
+  const s1 = creer(gh, { stockage });
+  await s1.demarrer();
+  assert.deepEqual(Object.keys(s1.donnees().prepares), []);
+  gh.viderRequetes();
+  const s2 = creer(gh, { stockage, maintenant: () => T + 864e5 });
+  await s2.demarrer();
+  assert.equal(arbresLus(gh), 1);
+  assert.deepEqual(Object.keys(s2.donnees().prepares), [j2]);
+  assert.ok(j1 !== j2);
+});
+
 test('cache réutilisé : aucun blob relu si les sha sont identiques', async () => {
   const gh = creerFauxGitHub({ fichiers: depotTest() });
   const stockage = await ouvrirStockage();

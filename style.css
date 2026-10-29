@@ -347,6 +347,18 @@ select.champ-texte { appearance: auto; }
   display: grid; place-items: center; font-family: var(--f-mono); font-weight: 500;
 }
 .choix-qcm__texte { padding-top: 3px; overflow-wrap: anywhere; }
+.choix-qcm__btn--oui { border-color: var(--vein); background: var(--vein-pale); }
+.choix-qcm__btn--oui .choix-qcm__lettre { border-color: var(--vein); background: var(--vein); color: var(--surface); }
+.page--controle { gap: 18px; }
+.question-controle { display: grid; gap: 10px; }
+.question-controle__enonce { font-size: 1.02rem; font-weight: 600; line-height: 1.35; }
+.question-controle__score { color: var(--muted); font-size: 0.9rem; }
+.question-controle--erreur .question-controle__score { color: var(--faux); }
+.corrige { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.corrige__ligne { display: grid; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--rule); }
+.corrige__ligne--faux { border-left-color: var(--faux); background: var(--faux-pale); }
+.corrige__lettre { font-family: var(--f-mono); font-size: 0.8rem; color: var(--muted); }
+.corrige__expl { font-size: 0.9rem; }
 .idees-coche { display: grid; gap: 10px; }
 .idee-coche {
   appearance: none; display: flex; gap: 12px; align-items: flex-start; text-align: left; cursor: pointer; width: 100%;

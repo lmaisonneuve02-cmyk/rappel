@@ -226,10 +226,12 @@ export class Synchro extends EventTarget {
   // Charge la tête donnée : arbre, puis seulement les blobs utiles dont le sha a changé.
   // `ecrits` : textes que l'on vient d'écrire (inutile de les relire). Renvoie true si quelque chose a changé.
   async _charger(client, tete, ecrits = null) {
-    if (this._tete?.commit === tete.commit) return false;
+    // Même commit, mais un autre jour : le contrôle préparé du jour change (cheminUtile).
+    const jour = jourParis(this._maintenant());
+    if (this._tete?.commit === tete.commit && this._tete.jour === jour) return false;
     const racine = this._racine();
     const entrees = await client.arbre(tete.arbre);
-    const utiles = entrees.filter(e => e.type === 'blob' && cheminUtile(e.path, racine));
+    const utiles = entrees.filter(e => e.type === 'blob' && cheminUtile(e.path, racine, jour));
     const connu = e => this._fichiers[e.path]?.sha === e.sha;
     const aLire = utiles.filter(e => !(ecrits && typeof ecrits[e.path] === 'string') && !connu(e));
     const textes = await enParallele(aLire, PARALLELE, e => client.blob(e.sha));
@@ -242,7 +244,7 @@ export class Synchro extends EventTarget {
     const changes = [...new Set([...Object.keys(this._fichiers), ...Object.keys(nouveaux)])]
       .filter(p => this._fichiers[p]?.sha !== nouveaux[p]?.sha);
     this._fichiers = nouveaux;
-    this._tete = tete;
+    this._tete = { ...tete, jour };
     this._analyser(changes);
     return true;
   }

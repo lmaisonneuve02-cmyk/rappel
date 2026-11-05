@@ -95,22 +95,28 @@ export function nouvellesDuJour(donnees, maintenant) {
 // Cartes du jour (règle du 16 oct. 2026) : cartes distinctes répondues aujourd'hui, nouvelles et révisions
 // (en avance comprises). Une carte ratée qui revient compte une fois ; contestations et QCM de la fac exclus.
 // revisions : cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'est nouvelle).
-// Cartes faites autrement (5 nov.) : une carte dont toutes les lignes du jour sont `mode: 'qcm'` compte 2/3 de
-// carte, sans plafond ; qcm = ces cartes (toutes), qcmComptees = leur poids en cartes entières.
+// Cartes légères (règles du 5 nov. 2026, décisions explicites : QCM, puis option C) : une carte dont toutes les
+// lignes du jour sont `mode: 'qcm'`, ou une carte à trous (`type: 'cloze'`), compte 2/3 de carte, sans plafond ;
+// qcm = ces cartes (toutes), qcmComptees = leur poids en cartes entières ; trous = celles qui sont à trous.
 export function cartesDuJour(donnees, maintenant) {
-  const toutes = new Set(), nouvelles = new Set(), ecrites = new Set();
+  const toutes = new Set(), nouvelles = new Set(), ecrites = new Set(), trous = new Set();
+  const cartes = donnees.cartes, paquets = donnees.paquets;
   for (const l of lignesDuJour(donnees, maintenant)) {
     const k = cleLigne(l);
     toutes.add(k);
     if (l.nouvelle === true) nouvelles.add(k);
     if (l.mode !== 'qcm') ecrites.add(k);
+    const e = cartes?.[l.carte];
+    const c = e && e.paquet === l.paquet && e.carte ? e.carte : (paquets?.[l.paquet]?.cartes || []).find(x => x && x.id === l.carte);
+    if (c?.type === 'cloze') trous.add(k);
   }
-  const qcm = [...toutes].filter(k => !ecrites.has(k));
-  const qcmNouvelles = qcm.filter(k => nouvelles.has(k)).length;
-  const nouvellesEcrites = [...ecrites].filter(k => nouvelles.has(k)).length;
-  const cartes = Math.floor((TIERS * ecrites.size + POIDS_QCM * qcm.length) / TIERS);
-  const nouvellesCompte = Math.floor((TIERS * nouvellesEcrites + POIDS_QCM * qcmNouvelles) / TIERS);
-  return { cartes, nouvelles: nouvellesCompte, revisions: cartes - nouvellesCompte, qcm: qcm.length, qcmComptees: Math.floor(POIDS_QCM * qcm.length / TIERS) };
+  const legeres = [...toutes].filter(k => !ecrites.has(k) || trous.has(k));
+  const lourdes = toutes.size - legeres.length;
+  const legeresNouvelles = legeres.filter(k => nouvelles.has(k)).length;
+  const lourdesNouvelles = nouvelles.size - legeresNouvelles;
+  const cartesN = Math.floor((TIERS * lourdes + POIDS_QCM * legeres.length) / TIERS);
+  const nouvellesCompte = Math.floor((TIERS * lourdesNouvelles + POIDS_QCM * legeresNouvelles) / TIERS);
+  return { cartes: cartesN, nouvelles: nouvellesCompte, revisions: cartesN - nouvellesCompte, qcm: legeres.length, qcmComptees: Math.floor(POIDS_QCM * legeres.length / TIERS), trous: trous.size };
 }
 
 // Semaine de cartes (règle du 26 oct. 2026, décision explicite de l'utilisateur) : du mercredi au mardi,

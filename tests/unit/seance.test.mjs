@@ -127,9 +127,9 @@ test('cartesDuJour : cartes distinctes du jour, retour à +10 min compté une fo
       ligne('x2', z('2026-10-12T22:00:00Z')),                         // le lendemain
     ],
   });
-  assert.deepEqual(cartesDuJour(d, T), { cartes: 4, nouvelles: 1, revisions: 3, qcm: 0, qcmComptees: 0 });
-  assert.deepEqual(cartesDuJour(donneesDe(), T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0 });
-  assert.deepEqual(cartesDuJour({}, T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0 });
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 4, nouvelles: 1, revisions: 3, qcm: 0, qcmComptees: 0, trous: 0 });
+  assert.deepEqual(cartesDuJour(donneesDe(), T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0, trous: 0 });
+  assert.deepEqual(cartesDuJour({}, T), { cartes: 0, nouvelles: 0, revisions: 0, qcm: 0, qcmComptees: 0, trous: 0 });
   // même identifiant dans deux paquets : deux cartes
   const d2 = donneesDe({ reponses: [ligne('a', T), ligne('a', T + MIN, { paquet: 'p2' })] });
   assert.equal(cartesDuJour(d2, T).cartes, 2);
@@ -145,7 +145,7 @@ test('cartesDuJour : cartes faites en QCM comptées 2/3, sans plafond', () => {
     qcm('m1', 300, rev), ligne('m1', T + 301000, rev),                       // QCM puis écrite : compte comme écrite
   ] });
   // 4 écrites + 90 QCM : 4 + 60 = 64 cartes ; nouvelles : floor(30 × 2/3) = 20
-  assert.deepEqual(cartesDuJour(d, T), { cartes: 64, nouvelles: 20, revisions: 44, qcm: 90, qcmComptees: 60 });
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 64, nouvelles: 20, revisions: 44, qcm: 90, qcmComptees: 60, trous: 0 });
   assert.deepEqual(cartesDuJour(donneesDe({ reponses: [qcm('a', 0, rev), qcm('b', 1, rev)] }), T).cartes, 1);   // 2 × 2/3 = 1,33
   assert.equal(cartesDuJour(donneesDe({ reponses: [qcm('a', 0, rev), qcm('b', 1, rev), qcm('c', 2, rev)] }), T).cartes, 2);
   // L'objectif s'atteint avec 90 QCM de nouvelles : 60 cartes.
@@ -153,6 +153,18 @@ test('cartesDuJour : cartes faites en QCM comptées 2/3, sans plafond', () => {
   const d3 = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 100 }, reponses: Array.from({ length: 45 }, (_, i) => qcm(`n${i}`, i)) });
   const o = objectifDuJour(d3, T, 30);
   assert.deepEqual([o.cartes, o.atteint], [30, true]);
+});
+
+test('cartesDuJour : cartes à trous comptées 2/3 comme les QCM (option C), écrites ou non', () => {
+  const trou = id => carte(id, { type: 'cloze', q: 'Le {{x}} est {{y}}.' });
+  const p = paquet('p1', [...Array.from({ length: 6 }, (_, i) => trou(`t${i}`)), carte('e1'), carte('e2')]);
+  const rev = { nouvelle: false };
+  const d = donneesDe({ paquets: [p], reponses: [
+    ...Array.from({ length: 6 }, (_, i) => ligne(`t${i}`, T + i * 1000, i < 3 ? { nouvelle: true } : rev)),   // 6 trous : 3 nouvelles, 3 révisions
+    ligne('e1', T + 10000, rev), ligne('e2', T + 11000, rev),                                                  // 2 cartes écrites
+  ] });
+  // 2 + 6 × 2/3 = 6 cartes ; nouvelles : floor(3 × 2/3) = 2 ; 6 cartes à trous
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 6, nouvelles: 2, revisions: 4, qcm: 6, qcmComptees: 4, trous: 6 });
 });
 
 test('Seance en mode QCM : au plus `max` cartes, lignes marquées mode « qcm »', () => {
@@ -898,7 +910,7 @@ test('Seance : une carte ratée revient dans la séance et ne compte qu\'une foi
   }
   assert.deepEqual(vus, ['a', 'b', 'a']);
   assert.equal(s.etape().type, 'fin');
-  assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1, qcm: 0, qcmComptees: 0 });
+  assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1, qcm: 0, qcmComptees: 0, trous: 0 });
 });
 
 test('Seance : trous variables à la révision seulement, nouvelle carte avec tous ses trous', () => {

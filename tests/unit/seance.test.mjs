@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
-  JOURS_TOTAL_SEUL, Seance, QCM_MAX, qcmRestants, semaineEnCours, debutSemaine,
+  JOURS_TOTAL_SEUL, Seance, semaineEnCours, debutSemaine,
 } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
@@ -135,30 +135,24 @@ test('cartesDuJour : cartes distinctes du jour, retour à +10 min compté une fo
   assert.equal(cartesDuJour(d2, T).cartes, 2);
 });
 
-test('cartesDuJour : QCM des cartes comptés au plus 20 par jour, révisions d\'abord', () => {
+test('cartesDuJour : cartes faites en QCM comptées 2/3, sans plafond', () => {
   const qcm = (id, i, extra = {}) => ligne(id, T + i * 1000, { mode: 'qcm', verdict: 'partiel', note: 2, correcteur: 'qcm', ...extra });
   const rev = { nouvelle: false };
   const d = donneesDe({ reponses: [
-    ...Array.from({ length: 25 }, (_, i) => qcm(`r${i}`, i, rev)),         // 25 révisions en QCM
-    ...Array.from({ length: 5 }, (_, i) => qcm(`n${i}`, 30 + i)),           // 5 nouvelles en QCM
-    ...['e1', 'e2', 'e3'].map((id, i) => ligne(id, T + (40 + i) * 1000, rev)),   // 3 révisions écrites
-    qcm('m1', 50, rev), ligne('m1', T + 51000, rev),                        // QCM puis écrite : compte comme écrite
+    ...Array.from({ length: 60 }, (_, i) => qcm(`r${i}`, i, rev)),         // 60 révisions en QCM
+    ...Array.from({ length: 30 }, (_, i) => qcm(`n${i}`, 100 + i)),         // 30 nouvelles en QCM
+    ...['e1', 'e2', 'e3'].map((id, i) => ligne(id, T + (200 + i) * 1000, rev)),  // 3 révisions écrites
+    qcm('m1', 300, rev), ligne('m1', T + 301000, rev),                       // QCM puis écrite : compte comme écrite
   ] });
-  assert.deepEqual(cartesDuJour(d, T), { cartes: 24, nouvelles: 0, revisions: 24, qcm: 30, qcmComptees: 20 });
-  assert.equal(qcmRestants(d, T), 0);
-  // Peu de révisions en QCM : les nouvelles complètent jusqu'à 20.
-  const d2 = donneesDe({ reponses: [
-    ...Array.from({ length: 3 }, (_, i) => qcm(`r${i}`, i, rev)),
-    ...Array.from({ length: 30 }, (_, i) => qcm(`n${i}`, 10 + i)),
-  ] });
-  assert.deepEqual(cartesDuJour(d2, T), { cartes: 20, nouvelles: 17, revisions: 3, qcm: 33, qcmComptees: 20 });
-  // L'objectif ne s'atteint pas avec des QCM seulement.
-  const p = paquet('p1', Array.from({ length: 40 }, (_, i) => carte(`n${i}`)));
-  const d3 = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 100 }, reponses: Array.from({ length: 35 }, (_, i) => qcm(`n${i}`, i)) });
+  // 4 écrites + 90 QCM : 4 + 60 = 64 cartes ; nouvelles : floor(30 × 2/3) = 20
+  assert.deepEqual(cartesDuJour(d, T), { cartes: 64, nouvelles: 20, revisions: 44, qcm: 90, qcmComptees: 60 });
+  assert.deepEqual(cartesDuJour(donneesDe({ reponses: [qcm('a', 0, rev), qcm('b', 1, rev)] }), T).cartes, 1);   // 2 × 2/3 = 1,33
+  assert.equal(cartesDuJour(donneesDe({ reponses: [qcm('a', 0, rev), qcm('b', 1, rev), qcm('c', 2, rev)] }), T).cartes, 2);
+  // L'objectif s'atteint avec 90 QCM de nouvelles : 60 cartes.
+  const p = paquet('p1', Array.from({ length: 100 }, (_, i) => carte(`n${i}`)));
+  const d3 = donneesDe({ paquets: [p], reglages: { nouvellesParJour: 100 }, reponses: Array.from({ length: 45 }, (_, i) => qcm(`n${i}`, i)) });
   const o = objectifDuJour(d3, T, 30);
-  assert.deepEqual([o.cartes, o.atteint, o.encore], [20, false, 10]);
-  assert.equal(qcmRestants(donneesDe(), T), QCM_MAX);
-  assert.equal(qcmRestants(d2, T), 0);
+  assert.deepEqual([o.cartes, o.atteint], [30, true]);
 });
 
 test('Seance en mode QCM : au plus `max` cartes, lignes marquées mode « qcm »', () => {
@@ -905,4 +899,31 @@ test('Seance : une carte ratée revient dans la séance et ne compte qu\'une foi
   assert.deepEqual(vus, ['a', 'b', 'a']);
   assert.equal(s.etape().type, 'fin');
   assert.deepEqual(cartesDuJour(d, t), { cartes: 2, nouvelles: 1, revisions: 1, qcm: 0, qcmComptees: 0 });
+});
+
+test('Seance : trous variables à la révision seulement, nouvelle carte avec tous ses trous', () => {
+  const trou = {
+    id: 'z1', type: 'cloze', q: 'A {{un}} B {{deux}} C {{trois}} D {{quatre}}',
+    bareme: { idees: ['un', 'deux', 'trois', 'quatre'].map((t, i) => ({ id: 't' + (i + 1), texte: t, formulations: [t, t + 's'], obligatoire: true })), pieges: [] },
+  };
+  // carte nouvelle : tous les trous
+  const dN = donneesDe({ paquets: [paquet('p1', [trou])] });
+  const eN = new Seance({ donnees: dN, maintenant: T, rnd: graine(3) }).etape();
+  assert.equal(eN.nouvelle, true);
+  assert.equal(eN.carte.q, trou.q);
+  // carte en révision : variantes sur plusieurs séances, 2 à 4 trous, barème cohérent, même carte dans l'étape répétée
+  let vues = new Set();
+  for (let s = 1; s <= 40; s++) {
+    const d = donneesDe({ paquets: [paquet('p1', [trou])], srs: { p1: { z1: du() } } });
+    const se = new Seance({ donnees: d, maintenant: T, rnd: graine(s) });
+    const e = se.etape();
+    assert.equal(e.nouvelle, false);
+    assert.equal(e.carte.id, 'z1');
+    assert.equal(se.etape().carte, e.carte);                       // stable tant qu'on ne répond pas
+    const n = (e.carte.q.match(/\{\{/g) || []).length;
+    assert.ok(n >= 2 && n <= 4);
+    assert.equal(e.carte.bareme.idees.length, n);
+    vues.add(e.carte.q);
+  }
+  assert.ok(vues.size > 1);
 });

@@ -1,6 +1,7 @@
 // Séance de révision : ce qu'il y a à faire aujourd'hui, file des cartes, étapes et notes.
 // Module pur : aucun accès au DOM ; horloge et aléa sont injectés.
 import { review, noteDe, estDisponible } from './fsrs.js';
+import { varianteTrous } from './trousvariables.js';
 import { MIN, jourParis, debutJourParis, finJourParis, isoParis, decalerJour } from './temps.js';
 
 const NOUVELLES_DEFAUT = 15;
@@ -10,9 +11,11 @@ const RECUL_FAUX = 4;   // une carte fausse revient 4 positions plus loin (comme
 // Jour du changement de règle (16 oct. 2026, règle notée par l'utilisateur) : seul le total compte,
 // car Rappel 2 lui avait servi les nouvelles cartes en premier ce jour-là.
 export const JOURS_TOTAL_SEUL = new Set(['2026-10-16']);
-// QCM des cartes (décision du 26 oct. 2026) : une carte répondue seulement en QCM ce jour-là compte
-// dans l'objectif, mais au plus QCM_MAX par jour (révisions d'abord) ; l'appli n'en propose pas plus.
-export const QCM_MAX = 20;
+// Cartes faites « autrement » (QCM rapide du 26 oct. 2026, règle changée le 5 nov. 2026, décision explicite) :
+// plus de plafond ; une carte répondue seulement en QCM ce jour-là compte 2/3 de carte (60 textes à trous
+// ou QCM = 40 cartes). Calcul en tiers, arrondi à l'entier inférieur.
+export const POIDS_QCM = 2;      // en tiers de carte
+export const TIERS = 3;
 
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 // Compteur du bilan qui correspond à un verdict (même règle que noter : par la note).
@@ -92,8 +95,8 @@ export function nouvellesDuJour(donnees, maintenant) {
 // Cartes du jour (règle du 16 oct. 2026) : cartes distinctes répondues aujourd'hui, nouvelles et révisions
 // (en avance comprises). Une carte ratée qui revient compte une fois ; contestations et QCM de la fac exclus.
 // revisions : cartes du jour qui ne sont pas des nouvelles du jour (aucune de leurs lignes du jour n'est nouvelle).
-// QCM des cartes (26 oct.) : une carte dont toutes les lignes du jour sont `mode: 'qcm'` ne compte que dans
-// la limite de QCM_MAX, révisions d'abord ; qcm = ces cartes (toutes), qcmComptees = celles qui comptent.
+// Cartes faites autrement (5 nov.) : une carte dont toutes les lignes du jour sont `mode: 'qcm'` compte 2/3 de
+// carte, sans plafond ; qcm = ces cartes (toutes), qcmComptees = leur poids en cartes entières.
 export function cartesDuJour(donnees, maintenant) {
   const toutes = new Set(), nouvelles = new Set(), ecrites = new Set();
   for (const l of lignesDuJour(donnees, maintenant)) {
@@ -104,12 +107,10 @@ export function cartesDuJour(donnees, maintenant) {
   }
   const qcm = [...toutes].filter(k => !ecrites.has(k));
   const qcmNouvelles = qcm.filter(k => nouvelles.has(k)).length;
-  const qcmRevisions = Math.min(QCM_MAX, qcm.length - qcmNouvelles);
-  const qcmComptees = qcmRevisions + Math.min(QCM_MAX - qcmRevisions, qcmNouvelles);
   const nouvellesEcrites = [...ecrites].filter(k => nouvelles.has(k)).length;
-  const revisions = ecrites.size - nouvellesEcrites + qcmRevisions;
-  const cartes = ecrites.size + qcmComptees;
-  return { cartes, nouvelles: cartes - revisions, revisions, qcm: qcm.length, qcmComptees };
+  const cartes = Math.floor((TIERS * ecrites.size + POIDS_QCM * qcm.length) / TIERS);
+  const nouvellesCompte = Math.floor((TIERS * nouvellesEcrites + POIDS_QCM * qcmNouvelles) / TIERS);
+  return { cartes, nouvelles: nouvellesCompte, revisions: cartes - nouvellesCompte, qcm: qcm.length, qcmComptees: Math.floor(POIDS_QCM * qcm.length / TIERS) };
 }
 
 // Semaine de cartes (règle du 26 oct. 2026, décision explicite de l'utilisateur) : du mercredi au mardi,
@@ -137,9 +138,6 @@ export function semaineEnCours(donnees, maintenant, objectif = 0, nouvelles = 0)
     encore: Math.max(0, o - cartes), encoreNouvelles: Math.max(0, n - faites), atteinte: cartes >= o && faites >= n,
   };
 }
-
-// QCM des cartes encore possibles aujourd'hui (0 à QCM_MAX).
-export const qcmRestants = (donnees, maintenant) => Math.max(0, QCM_MAX - cartesDuJour(donnees, maintenant).qcm);
 
 // Révisions du jour encore à faire : cartes dues au plus tard aujourd'hui et pas encore répondues aujourd'hui.
 export function revisionsRestantes(donnees, maintenant) {
@@ -233,10 +231,12 @@ function sansVide(objet) {
 
 export class Seance {
   // maintenant : ms, ou une fonction qui renvoie l'heure (horloge injectée).
-  // mode 'qcm' : QCM des cartes, au plus `max` cartes (qcmRestants).
+  // mode 'qcm' : QCM des cartes, au plus `max` cartes (sans limite par défaut).
   // priorite : [{paquet, carteId}] placées en tête (feuille blanche : idées oubliées d'abord).
   constructor({ donnees, maintenant = Date.now(), filtre = 'tout', enAvance = false, mode = 'ecrit', max = Infinity, priorite = [], rnd = Math.random }) {
     this.donnees = donnees;
+    this.rnd = rnd;
+    this.variante = null;   // trous variables : { i, cle, carte } (une tirage par passage)
     this.mode = mode === 'qcm' ? 'qcm' : 'ecrit';
     this.horloge = typeof maintenant === 'function' ? maintenant : null;
     const t0 = this.horloge ? this.horloge() : maintenant;
@@ -336,8 +336,15 @@ export class Seance {
       if (ficheId && !this.fichesMontrees.has(ficheId)) return { type: 'fiche', ficheId, paquet: el.paquet };
     }
     const total = this.file.length;
+    // Trous variables (5 nov.) : à la révision, un texte à trous à 3 trous ou plus n'en garde que 2 à n au hasard.
+    let carteVue = carte;
+    if (!nouvelle && carte?.type === 'cloze') {
+      const cle = el.paquet + '/' + el.carteId;
+      if (!this.variante || this.variante.i !== this.i || this.variante.cle !== cle) this.variante = { i: this.i, cle, carte: varianteTrous(carte, this.rnd) };
+      carteVue = this.variante.carte;
+    }
     // restantes : cartes encore à faire, celle-ci comprise.
-    return { type: 'carte', paquet: el.paquet, carte, etat, nouvelle, rang: this.i + 1, total, restantes: total - this.i };
+    return { type: 'carte', paquet: el.paquet, carte: carteVue, etat, nouvelle, rang: this.i + 1, total, restantes: total - this.i };
   }
 
   ficheVue() {

@@ -1,6 +1,6 @@
 // QCM des cartes (décision du 26 oct. 2026) : pour les jours sans élan, la réponse d'une carte à
 // reconnaître parmi des réponses d'autres cartes. Ordre tiré à chaque affichage (pas de « c'est la B »
-// à retenir). Une bonne réponse vaut « partiel » ; QCM_MAX cartes par jour au plus (seance.js).
+// à retenir). Une bonne réponse vaut « partiel » ; 3 cartes en QCM comptent 2 cartes, sans plafond (seance.js).
 // Module pur : aléa injecté.
 import { refText, normaliser } from './texte.js';
 

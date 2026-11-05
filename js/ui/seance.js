@@ -1,5 +1,5 @@
 // Séance : fiche avant les nouvelles cartes, carte, correction, verdict, contestation, pause, fin.
-import { Seance, apportDuFiltre, revisionsEnAvance, qcmRestants } from '../seance.js';
+import { Seance, apportDuFiltre, revisionsEnAvance } from '../seance.js';
 import { propositionsCarte, resultatQcmCarte } from '../qcmcartes.js';
 import { ideesACocher, resultatCoche, DELAI_RETOURNER } from '../coche.js';
 import { CLES } from '../config.js';
@@ -84,7 +84,7 @@ export function creer(ctx, params = {}) {
   const modeQcm = params.mode === 'qcm';
   const seance = new Seance({
     donnees, maintenant: () => ctx.maintenant(), filtre: params.filtre || 'tout', enAvance: !!params.enAvance,
-    mode: modeQcm ? 'qcm' : 'ecrit', max: modeQcm ? qcmRestants(donnees, ctx.maintenant()) : Infinity,
+    mode: modeQcm ? 'qcm' : 'ecrit', max: Infinity,
     priorite: Array.isArray(params.priorite) ? params.priorite : [],
   });
   const objectifAuDepart = ctx.atteint();

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
+  nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, cartesEssentielles, apportDuFiltre, revisionsEnAvance,
   JOURS_TOTAL_SEUL, FORMATS, Seance, semaineEnCours, debutSemaine,
 } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
@@ -19,7 +19,7 @@ const etat = (last, due, extra = {}) => ({ s: 4, d: 5, due, last, reps: 1, lapse
 const du = (k = 0) => etat(T - 4 * JOUR - k, T - HEURE - k);      // à réviser maintenant
 const futur = (jours = 3) => etat(T - JOUR, T + jours * JOUR);     // pas encore dû
 
-function donneesDe({ paquets = [], srs = {}, reponses = [], fiches = {}, reglages = {}, ordre } = {}) {
+function donneesDe({ paquets = [], srs = {}, reponses = [], fiches = {}, reglages = {}, ordre, idees = {} } = {}) {
   const p = {}, cartes = {};
   for (const x of paquets) {
     p[x.id] = x;
@@ -29,7 +29,7 @@ function donneesDe({ paquets = [], srs = {}, reponses = [], fiches = {}, reglage
     plan: null, paquets: p, ordre: ordre ?? paquets.map(x => x.id), fiches, qcm: {}, srs, reponses, qcmJournal: [],
     carnet: { abreviations: {}, cartes: {} }, aRevoir: { cas: [] },
     reglages: { nouvellesParJour: 15, objectifJour: 30, pauseToutes: 30, ordrePaquets: [], ...reglages },
-    exceptions: { jours: {} }, historique: { days: {} }, cartes,
+    exceptions: { jours: {} }, historique: { days: {} }, cartes, idees,
   };
 }
 
@@ -294,6 +294,27 @@ test('nouvellesPossibles : ordre des paquets puis du fichier, limite du jour', (
   d.reglages.nouvellesParJour = 0;
   d.reponses = [];
   assert.deepEqual(nouvellesPossibles(d, T), []);
+});
+
+test('nouvellesPossibles : l\'essentiel passe d\'abord, réglable', () => {
+  const idees = { c1: { idees: [
+    { id: 'i1', importance: 'essentiel', cartes: ['a2', 'b2'] },
+    { id: 'i2', importance: 'utile', cartes: ['a1'] },
+    { id: 'i3', importance: 'essentiel', cartes: ['a3'] },
+  ] } };
+  const d = donneesDe({
+    paquets: [paquet('p1', [carte('a1'), carte('a2'), carte('a3')]), paquet('p2', [carte('b1'), carte('b2')])],
+    srs: { p1: { a3: futur() } }, idees, reglages: { nouvellesParJour: 15 },
+  });
+  const ids = r => r.map(x => `${x.paquet}/${x.carteId}`);
+  assert.deepEqual([...cartesEssentielles(d)].sort(), ['a2', 'a3', 'b2']);
+  assert.deepEqual(ids(nouvellesPossibles(d, T)), ['p1/a2', 'p2/b2', 'p1/a1', 'p2/b1']);
+  assert.deepEqual(ids(nouvellesPossibles(d, T, 'p2')), ['p2/b2', 'p2/b1']);
+  d.reglages.nouvellesParJour = 2;
+  assert.deepEqual(ids(nouvellesPossibles(d, T)), ['p1/a2', 'p2/b2']);
+  d.reglages.nouvellesParJour = 15;
+  d.reglages.essentielDabord = false;
+  assert.deepEqual(ids(nouvellesPossibles(d, T)), ['p1/a1', 'p1/a2', 'p2/b1', 'p2/b2']);
 });
 
 test('nouvellesPossibles : paquets absents de l\'ordre pris ensuite, réglage absent → 15', () => {

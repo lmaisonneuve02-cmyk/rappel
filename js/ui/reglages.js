@@ -23,6 +23,16 @@ function reglerNombre({ id, libelle, aide, valeur, min, max, pas = 1, decimales 
     h('div', { class: 'reglage-nombre', role: 'group', 'aria-labelledby': `${id}-libelle` }, moins, affiche, plus));
 }
 
+// Interrupteur oui/non.
+function reglerCase({ id, libelle, aide, valeur, onChange }) {
+  const input = h('input', { type: 'checkbox', id, class: 'reglage-case' });
+  input.checked = !!valeur;
+  input.addEventListener('change', () => onChange(input.checked));
+  return h('div', { class: 'reglage' },
+    h('div', { class: 'reglage__texte' }, h('label', { for: id, class: 'reglage__libelle', text: libelle }), aide ? h('p', { class: 'aide', text: aide }) : null),
+    input);
+}
+
 function section(id, titre, ...contenu) {
   return h('section', { class: 'section-reglages', id: `reglages-${id}`, 'aria-labelledby': `titre-${id}` },
     h('h2', { class: 'sous-titre', id: `titre-${id}`, text: titre, tabindex: '-1' }), contenu);
@@ -384,6 +394,7 @@ export function creer(ctx, params = {}) {
       section('cles', 'Mes clés',
         h('p', { class: 'aide', text: 'Gardées seulement sur cet appareil.' }), blocJeton(), blocGemini()),
       section('rythme', 'Rythme',
+        reglerCase({ id: 'r-essentiel', libelle: 'L\'essentiel d\'abord', aide: 'Parmi les nouvelles cartes, celles des idées « essentiel » des listes d\'idées passent en premier.', valeur: r.essentielDabord !== false, onChange: v => enregistrer({ essentielDabord: v }) }),
         reglerNombre({ id: 'r-nouvelles', libelle: 'Nouvelles cartes par jour', aide: 'Au plus, chaque jour, après tes révisions : cartes jamais vues proposées.', valeur: r.nouvellesParJour, min: 0, max: 200, pas: 5, onChange: v => enregistrer({ nouvellesParJour: v }) }),
         reglerNombre({ id: 'r-objectif', libelle: 'Objectif du jour', aide: 'Cartes à faire par jour, révisions d\'abord.', valeur: r.objectifJour, min: 5, max: 200, pas: 5, onChange: v => enregistrer({ objectifJour: v }) }),
         reglerNombre({ id: 'r-nouvelles-objectif', libelle: 'Dont nouvelles cartes', aide: 'Chaque jour, mêlées aux révisions dès le début.', valeur: r.nouvellesObjectif, min: 0, max: 200, pas: 1, onChange: v => enregistrer({ nouvellesObjectif: v }) }),

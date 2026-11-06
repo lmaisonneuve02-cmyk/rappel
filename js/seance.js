@@ -198,17 +198,32 @@ export function aReviser(donnees, maintenant, filtre = 'tout') {
   return res;
 }
 
+// Cartes liées à au moins une idée « essentiel » d'une liste d'idées (rappel/idees/).
+export function cartesEssentielles(donnees) {
+  const ids = new Set();
+  for (const cours of Object.values(donnees.idees || {})) {
+    for (const idee of cours?.idees || []) {
+      if (idee?.importance === 'essentiel') for (const id of idee.cartes || []) ids.add(id);
+    }
+  }
+  return ids;
+}
+
+// Nouvelles cartes du jour : les essentielles d'abord (réglage essentielDabord, vrai par défaut),
+// puis les autres ; dans chaque groupe, ordre des paquets puis du fichier.
 export function nouvellesPossibles(donnees, maintenant, filtre = 'tout') {
   const limite = nombre(donnees.reglages?.nouvellesParJour, NOUVELLES_DEFAUT);
   const reste = Math.max(0, limite - nouvellesDuJour(donnees, maintenant));
   const res = [];
   if (!reste) return res;
+  const jamaisVues = [];
   for (const { paquet, carte } of cartesDe(donnees, filtre)) {
-    if (etatStocke(donnees, paquet, carte.id)) continue;
-    res.push({ paquet, carteId: carte.id });
-    if (res.length >= reste) break;
+    if (!etatStocke(donnees, paquet, carte.id)) jamaisVues.push({ paquet, carteId: carte.id });
   }
-  return res;
+  if (donnees.reglages?.essentielDabord === false) return jamaisVues.slice(0, reste);
+  const essentielles = cartesEssentielles(donnees);
+  if (!essentielles.size) return jamaisVues.slice(0, reste);
+  return [...jamaisVues.filter(x => essentielles.has(x.carteId)), ...jamaisVues.filter(x => !essentielles.has(x.carteId))].slice(0, reste);
 }
 
 // Ce qu'une séance sur ce filtre apporterait à l'objectif : révisions pas encore répondues aujourd'hui

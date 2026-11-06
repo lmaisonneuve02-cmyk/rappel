@@ -8,7 +8,7 @@ import {
 } from './fusion.js';
 
 export const REGLAGES_DEFAUT = gelerProfond({
-  nouvellesParJour: 15, objectifJour: OBJECTIF_DEFAUT, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, feuillesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
+  nouvellesParJour: 15, essentielDabord: true, objectifJour: OBJECTIF_DEFAUT, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, feuillesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
   qcmParSeance: 8, pauseToutes: 30, modeles: { correction: '', contestation: '' },
   voix: { vitesse: 1, silence: 2.5 }, maj: 0,
 });
@@ -69,6 +69,7 @@ function avecDefauts(fichier) {
   return {
     ...D, ...f,
     nouvellesParJour: nombreOu(f.nouvellesParJour, D.nouvellesParJour),
+    essentielDabord: f.essentielDabord !== false,
     objectifJour: nombreOu(f.objectifJour, D.objectifJour),
     nouvellesObjectif: nombreOu(f.nouvellesObjectif, D.nouvellesObjectif),
     objectifSemaine: nombreOu(f.objectifSemaine, D.objectifSemaine),

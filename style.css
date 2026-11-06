@@ -525,6 +525,7 @@ select.champ-texte { appearance: auto; }
 .reglage--colonne { flex-direction: column; align-items: stretch; }
 .reglage__texte { flex: 1 1 12rem; min-width: 0; }
 .reglage__libelle { font-weight: 700; }
+.reglage-case { width: 1.4rem; height: 1.4rem; }
 .reglage-nombre { display: inline-flex; align-items: center; gap: 6px; }
 .reglage-nombre__valeur { font-family: var(--f-mono); min-width: 5.6rem; text-align: center; font-size: 1.02rem; font-variant-numeric: tabular-nums; }
 .ordre-paquets { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }

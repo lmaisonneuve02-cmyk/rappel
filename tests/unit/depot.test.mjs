@@ -35,7 +35,7 @@ function objetsTest() {
 test('REGLAGES_DEFAUT : valeurs de la conception, gelées', () => {
   assert.deepEqual(REGLAGES_DEFAUT, {
     nouvellesParJour: 15, objectifJour: 60, nouvellesObjectif: 0, objectifSemaine: 0, nouvellesSemaine: 0, feuillesSemaine: 0, ordrePaquets: [], baremeQcm: [1, 0.5, 0.2, 0],
-    qcmParSeance: 8, pauseToutes: 30, modeles: { correction: '', contestation: '' },
+    qcmParSeance: 8, pauseToutes: 30, essentielDabord: true, modeles: { correction: '', contestation: '' },
     voix: { vitesse: 1, silence: 2.5 }, maj: 0,
   });
   assert.ok(Object.isFrozen(REGLAGES_DEFAUT) && Object.isFrozen(REGLAGES_DEFAUT.voix));

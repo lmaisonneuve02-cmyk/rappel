@@ -1,5 +1,5 @@
 // Aujourd'hui : ta séance du jour (révisions puis nouvelles cartes), un seul grand bouton.
-import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour } from '../seance.js';
+import { apportDuFiltre, revisionsEnAvance, nouvellesDuJour, FORMATS } from '../seance.js';
 import { qcmProposables } from '../qcm.js';
 import { feuillesDeLaSemaine } from '../feuille.js';
 import { controleDuJour } from '../controle.js';
@@ -52,7 +52,7 @@ export function creer(ctx, params = {}) {
 
   function filtreDuJour(d, now) {
     const jour = jourParis(now);
-    if (filtreMemo.jour !== jour || (filtreMemo.filtre !== 'tout' && !d.paquets[filtreMemo.filtre])) filtreMemo = { jour, filtre: 'tout' };
+    if (filtreMemo.jour !== jour || (filtreMemo.filtre !== 'tout' && !d.paquets[filtreMemo.filtre] && !FORMATS[filtreMemo.filtre])) filtreMemo = { jour, filtre: 'tout' };
     return filtreMemo.filtre;
   }
 
@@ -114,7 +114,7 @@ export function creer(ctx, params = {}) {
     const semaine = ctx.semaine?.();
     const ligneSemaine = semaine ? h('p', { class: 'objectif-ligne objectif-ligne--semaine', text: texteSemaine(semaine) }) : null;
 
-    const paquetNom = filtre === 'tout' ? null : (d.paquets[filtre]?.nom || filtre);
+    const paquetNom = filtre === 'tout' ? null : (FORMATS[filtre] || d.paquets[filtre]?.nom || filtre);
     const enLigne = ctx.enLigne() && etat.mode !== 'hors-ligne';
     // Ce paquet suffit-il pour l'objectif ? (les cartes ratées qui reviennent sont déjà comptées)
     // Sinon, révisions d'abord : elles sont dans les autres paquets, « Tout » devient l'action principale.
@@ -169,6 +169,10 @@ export function creer(ctx, params = {}) {
 
     // Pastilles : un seul paquet ? (seulement si au moins deux paquets ont des cartes aujourd'hui)
     const options = [];
+    for (const id of Object.keys(FORMATS)) {
+      const n = resume(d, now, id).total;
+      if (n > 0 || id === filtre) options.push({ id, libelle: FORMATS[id], n });
+    }
     for (const id of d.ordre) {
       const n = resume(d, now, id).total;
       if (n > 0 || id === filtre) options.push({ id, libelle: d.paquets[id]?.nom || id, n });
@@ -177,7 +181,7 @@ export function creer(ctx, params = {}) {
       const groupe = pastilles([{ id: 'tout', libelle: 'Tout', n: total.total }, ...options], filtre, id => {
         filtreMemo = { jour: jourParis(ctx.maintenant()), filtre: id };
         afficher(true);
-      }, { etiquette: 'Choisir un paquet' });
+      }, { etiquette: 'Choisir un format ou un paquet' });
       blocs.push(h('div', { class: 'choix-paquet' }, h('p', { class: 'petit-titre', text: 'Un seul paquet ? (facultatif)' }), groupe));
       requestAnimationFrame(() => { groupe.scrollLeft = defile; });
     }

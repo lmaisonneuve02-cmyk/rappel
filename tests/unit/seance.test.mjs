@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   nouvellesDuJour, cartesDuJour, revisionsRestantes, objectifDuJour, aReviser, nouvellesPossibles, apportDuFiltre, revisionsEnAvance,
-  JOURS_TOTAL_SEUL, Seance, semaineEnCours, debutSemaine,
+  JOURS_TOTAL_SEUL, FORMATS, Seance, semaineEnCours, debutSemaine,
 } from '../../js/seance.js';
 import { review } from '../../js/fsrs.js';
 import { MIN, HEURE, JOUR, isoParis } from '../../js/temps.js';
@@ -938,4 +938,16 @@ test('Seance : trous variables à la révision seulement, nouvelle carte avec to
     vues.add(e.carte.q);
   }
   assert.ok(vues.size > 1);
+});
+
+test('filtre de format : « @trous » et « @normales » séparent les textes à trous des autres cartes', () => {
+  const d = donneesDe({ paquets: [
+    paquet('p1', [carte('a'), carte('b', { type: 'cloze' }), carte('c', { type: 'raisonnement' })]),
+    paquet('p2', [carte('d', { type: 'cloze' }), carte('e')]),
+  ], srs: { p1: { a: du(), b: du(1) }, p2: { d: du(2) } } });
+  assert.deepEqual(Object.keys(FORMATS), ['@trous', '@normales']);
+  assert.deepEqual(aReviser(d, T, '@trous').map(x => x.carteId).sort(), ['b', 'd']);
+  assert.deepEqual(aReviser(d, T, '@normales').map(x => x.carteId), ['a']);
+  assert.deepEqual(nouvellesPossibles(d, T, '@trous').map(x => x.carteId), []);
+  assert.deepEqual(nouvellesPossibles(d, T, '@normales').map(x => x.carteId).sort(), ['c', 'e']);
 });

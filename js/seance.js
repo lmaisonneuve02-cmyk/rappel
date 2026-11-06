@@ -20,7 +20,10 @@ export const TIERS = 3;
 const estContestation = l => l.correcteur === 'contestation' || l.remplace != null;
 // Compteur du bilan qui correspond à un verdict (même règle que noter : par la note).
 const compteurDe = verdict => { const n = noteDe(verdict); return n >= 3 ? 'justes' : n === 2 ? 'partielles' : 'fausses'; };
-const dansFiltre = (filtre, paquet) => !filtre || filtre === 'tout' || filtre === paquet;
+// Filtres de format (toutes les paquets, un seul type de carte) : « @trous » et « @normales ».
+export const FORMATS = { '@trous': 'Textes à trous', '@normales': 'Cartes normales' };
+const dansFiltre = (filtre, paquet) => !filtre || filtre === 'tout' || filtre in FORMATS || filtre === paquet;
+const dansFormat = (filtre, carte) => filtre === '@trous' ? carte?.type === 'cloze' : filtre === '@normales' ? carte?.type !== 'cloze' : true;
 const etatStocke = (donnees, paquet, id) => donnees.srs?.[paquet]?.[id] ?? null;
 
 function nombre(valeur, defaut) {
@@ -42,7 +45,7 @@ function* cartesDe(donnees, filtre) {
   for (const paquet of paquetsOrdonnes(donnees)) {
     if (!dansFiltre(filtre, paquet)) continue;
     for (const carte of donnees.paquets[paquet].cartes || []) {
-      if (carte && carte.id != null) yield { paquet, carte };
+      if (carte && carte.id != null && dansFormat(filtre, carte)) yield { paquet, carte };
     }
   }
 }

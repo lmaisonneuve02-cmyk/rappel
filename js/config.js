@@ -7,4 +7,4 @@ export const CLES = {
   reponse: 'rappel.reponse',
 };
 export const OBJECTIF_DEFAUT = 60;
-export const VERSION = '2.5.1';
+export const VERSION = '2.6.0';

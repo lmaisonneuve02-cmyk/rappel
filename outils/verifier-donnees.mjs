@@ -194,7 +194,10 @@ function verifierFichierQcm(f, fichier, cours, ctx) {
   if (!estObjet(f)) { err('le fichier doit être un objet {cours, ue, qcm}'); return 0; }
   if (f.cours !== cours) err(`« cours » vaut « ${f.cours} », le nom du fichier annonce « ${cours} »`);
   if (!nonVide(f.ue)) err('UE « ue » manquante');
-  if (!ctx.coursConnus.has(cours)) err(`cours « ${cours} » inconnu (${ctx.plan ? 'absent du plan' : 'aucun paquet de ce nom'})`);
+  // Annales officielles : un fichier par UE (annales-<ue>), hors du plan des cours.
+  const annales = /^annales-[a-z0-9]+$/.test(cours);
+  if (annales && f.cours === cours && cours !== `annales-${f.ue}`) err(`un fichier d'annales s'appelle annales-<ue> (ici « ${f.ue} »)`);
+  if (!annales && !ctx.coursConnus.has(cours)) err(`cours « ${cours} » inconnu (${ctx.plan ? 'absent du plan' : 'aucun paquet de ce nom'})`);
   if (!Array.isArray(f.qcm)) { err('« qcm » doit être une liste'); return 0; }
 
   f.qcm.forEach((q, n) => {
@@ -222,7 +225,8 @@ function verifierFichierQcm(f, fichier, cours, ctx) {
       if (l !== LETTRES[i]) e(`${pnom} : lettre « ${l} » au lieu de « ${LETTRES[i] || '?'} »`);
       if (!nonVide(p.t)) e(`${pnom} : texte « t » manquant`);
       if (typeof p.vrai !== 'boolean') e(`${pnom} : « vrai » doit valoir true ou false`);
-      if (!nonVide(p.expl)) e(`${pnom} : explication « expl » manquante`);
+      // Une annale n'a que la correction officielle : l'explication peut manquer.
+      if (typeof p.expl !== 'string' || (!nonVide(p.expl) && q.source !== 'annale')) e(`${pnom} : explication « expl » manquante`);
     });
     if (props && !props.some(p => estObjet(p) && p.vrai === true)) e('aucune proposition vraie');
     if (q.cartes != null) {

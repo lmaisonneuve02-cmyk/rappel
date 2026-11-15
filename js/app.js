@@ -14,15 +14,17 @@ import * as accueil from './ui/accueil.js';
 import * as aujourdhui from './ui/aujourdhui.js';
 import * as seance from './ui/seance.js';
 import * as qcm from './ui/qcm.js';
+import * as mission from './ui/mission.js';
 import * as suivi from './ui/suivi.js';
 import * as reglages from './ui/reglages.js';
 import * as mainslibres from './ui/mainslibres.js';
 import * as feuille from './ui/feuille.js';
 import * as controle from './ui/controle.js';
 
-const VUES = { accueil, aujourdhui, seance, qcm, suivi, reglages, mainslibres, feuille, controle };
+const VUES = { accueil, aujourdhui, seance, mission, qcm, suivi, reglages, mainslibres, feuille, controle };
 const ONGLETS = [
   ['aujourdhui', "Aujourd'hui", 'soleil'],
+  ['mission', 'Mission', 'etoile'],
   ['qcm', 'QCM', 'qcm'],
   ['suivi', 'Suivi', 'suivi'],
   ['reglages', 'Réglages', 'reglages'],

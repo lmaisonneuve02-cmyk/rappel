@@ -22,11 +22,11 @@ function listeCours(d) {
   for (const q of Object.values(d.qcm)) if (q.cours && !ids.includes(q.cours)) ids.push(q.cours);
   const titrePlan = new Map();
   for (const ue of d.plan?.ues || []) for (const c of ue.cours || []) if (c?.id) titrePlan.set(c.paquet || c.id, c.titre);
-  return ids.map(id => ({ id, nom: d.paquets[id]?.nom || titrePlan.get(id) || id, ue: d.paquets[id]?.ue }));
+  return ids.map(id => ({ id, nom: d.paquets[id]?.nom || titrePlan.get(id) || d.nomsQcm?.[id] || id, ue: d.paquets[id]?.ue }));
 }
 
 function nomCours(d, id) {
-  return d.paquets[id]?.nom || id;
+  return d.paquets[id]?.nom || d.nomsQcm?.[id] || id;
 }
 
 export function creer(ctx, params = {}) {

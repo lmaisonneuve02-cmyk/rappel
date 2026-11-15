@@ -501,6 +501,23 @@ select.champ-texte { appearance: auto; }
 .corr-prop--ko .corr-prop__etat .icone { color: var(--faux); }
 .corr-prop__expl { color: var(--muted); font-size: 0.92rem; padding-left: 38px; }
 
+/* Mission : chrono, niveaux, vrai/faux */
+.chrono { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+.chrono[hidden] { display: none; }
+.chrono__icone { width: 18px; height: 18px; }
+.chrono__barre { width: 56px; height: 6px; border-radius: 3px; }
+.chrono--fin { color: var(--faux); }
+.chrono--fin .chrono__barre::-webkit-progress-value { background: var(--faux); }
+.chrono--fin .chrono__barre::-moz-progress-bar { background: var(--faux); }
+.niveau__detail { color: var(--muted); font-size: 0.92rem; }
+.mission-enonce { color: var(--muted); font-size: 0.95rem; }
+.mission-source { color: var(--muted); font-size: 0.85rem; font-family: var(--f-mono); }
+.mission-cas p { white-space: pre-line; font-size: 0.95rem; }
+.vf-boutons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.vf-boutons .btn { min-height: 56px; font-size: 1.06rem; }
+.btn--vrai { border-color: var(--juste); color: var(--juste); background: var(--juste-pale); }
+.btn--faux { border-color: var(--faux); color: var(--faux); background: var(--faux-pale); }
+
 /* ---------- 12. Suivi ---------- */
 .jours { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .jour { display: grid; grid-template-columns: 4.4rem minmax(3rem, 1fr) auto; gap: 10px; align-items: center; font-size: 0.93rem; min-height: 28px; }

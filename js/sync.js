@@ -39,7 +39,7 @@ const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
 
 // Ce qui attend, compté comme l'utilisateur le voit : les réponses, sinon les modifications.
 function enAttente(ops) {
-  const reponses = ops.filter(o => o.type === 'reponse' || o.type === 'qcm-reponse').length;
+  const reponses = ops.filter(o => o.type === 'reponse' || o.type === 'qcm-reponse' || o.type === 'vf-reponse').length;
   if (reponses) return { n: reponses, texte: pluriel(reponses, 'réponse') };
   const autres = ops.filter(o => o.type !== 'srs').length || ops.length;
   return { n: autres, texte: pluriel(autres, 'modification') };
